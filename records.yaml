@@ -1,0 +1,6 @@
+ns_ip: 10.10.69.72
+records:
+- name: testing
+  type: A
+  value: 192.168.10.2
+ttl: 300

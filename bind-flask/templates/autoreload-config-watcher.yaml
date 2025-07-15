@@ -1,0 +1,15 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: reload-bind
+spec:
+  schedule: "*/2 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: reload-bind
+              image: busybox
+              command: ["sh", "-c", "rndc reload"]
+          restartPolicy: OnFailure
