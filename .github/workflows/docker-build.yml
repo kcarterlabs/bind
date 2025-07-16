@@ -44,7 +44,7 @@ jobs:
       - name: Package and push helm chart to Amazon ECR
         env:
           REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          REPOSITORY: kcarterlabs/bind
+          REPOSITORY: bind-helm
         run: |
           helm package $REPOSITORY
           helm push $REPOSITORY-0.1.0.tgz oci://$REGISTRY
