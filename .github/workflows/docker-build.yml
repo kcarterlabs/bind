@@ -16,7 +16,7 @@ jobs:
       # AWS_REGION: us-west-2
       CHART_DIR: bind-flask/
       CHART_NAME: bind-flask
-      ECR_REPO: 856817629634.dkr.ecr.us-west-2.amazonaws.com/bind-helm
+      ECR_REPO: 856817629634.dkr.ecr.us-west-2.amazonaws.com/bind-flask
 
     steps:
       - name: Checkout repository
