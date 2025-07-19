@@ -14,9 +14,10 @@ jobs:
       issues: write
     env:
       # AWS_REGION: us-west-2
-      CHART_DIR: bind-flask/
-      CHART_NAME: bind-flask
-      ECR_REPO: 856817629634.dkr.ecr.us-west-2.amazonaws.com/bind-flask
+      env:
+        CHART_DIR: bind-flask/
+        CHART_NAME: bind-flask
+        ECR_REGISTRY: 856817629634.dkr.ecr.us-west-2.amazonaws.com
 
     steps:
       - name: Checkout repository
@@ -45,7 +46,12 @@ jobs:
         run: |
           helm package $CHART_DIR --destination .
 
+      # - name: Push Helm chart to ECR
+      #   run: |
+      #     CHART_FILE=$(ls $CHART_NAME-*.tgz)
+      #     helm push $CHART_FILE oci://$ECR_REPO
+
       - name: Push Helm chart to ECR
         run: |
           CHART_FILE=$(ls $CHART_NAME-*.tgz)
-          helm push $CHART_FILE oci://$ECR_REPO
+          helm push $CHART_FILE oci://$ECR_REGISTRY
