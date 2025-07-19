@@ -12,6 +12,11 @@ jobs:
       id-token: write
       contents: read
       issues: write
+    env:
+      # AWS_REGION: us-west-2
+      CHART_DIR: bind-flask/
+      CHART_NAME: bind-dns
+      
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -35,3 +40,11 @@ jobs:
           docker build -t $REGISTRY/$REPOSITORY:$IMAGE_TAG .
           docker push $REGISTRY/$REPOSITORY:$IMAGE_TAG
 
+      - name: Package Helm chart
+        run: |
+          helm package $CHART_DIR --destination .
+
+      - name: Push Helm chart to ECR
+        run: |
+          CHART_FILE=$(ls $CHART_NAME-*.tgz)
+          helm push $CHART_FILE oci://$ECR_REPO
