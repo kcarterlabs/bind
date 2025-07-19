@@ -15,8 +15,8 @@ jobs:
     env:
       # AWS_REGION: us-west-2
       CHART_DIR: bind-flask/
-      CHART_NAME: bind-dns
-      
+      CHART_NAME: bind-flask
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
