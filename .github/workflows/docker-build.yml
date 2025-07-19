@@ -14,10 +14,9 @@ jobs:
       issues: write
     env:
       # AWS_REGION: us-west-2
-      env:
-        CHART_DIR: bind-flask/
-        CHART_NAME: bind-flask
-        ECR_REGISTRY: 856817629634.dkr.ecr.us-west-2.amazonaws.com
+      CHART_DIR: bind-flask/
+      CHART_NAME: bind-flask
+      ECR_REGISTRY: 856817629634.dkr.ecr.us-west-2.amazonaws.com
 
     steps:
       - name: Checkout repository
