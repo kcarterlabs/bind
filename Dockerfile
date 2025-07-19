@@ -1,20 +1,21 @@
 FROM ubuntu:22.04
 
-ENV DEBIAN_FRONTEND=noninteractive
-
 RUN apt-get update && \
-    apt-get install -y bind9 bind9utils dnsutils python3-pip inotify-tools && \
-    pip install flask pyyaml && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+    apt-get install -y bind9 bind9utils bind9-dnsutils python3 python3-pip inotify-tools && \
+    pip3 install pyyaml && \
+    mkdir -p /etc/bind/zones && \
+    rm -rf /var/lib/apt/lists/*
 
-COPY entrypoint.sh /entrypoint.sh
-COPY render_config.py /render_config.py
-COPY flask_server.py /flask_server.py
+COPY named.conf.options /etc/bind/named.conf.options
+COPY named.conf.local /etc/bind/named.conf.local
+COPY records.yaml /etc/bind/records.yaml
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY zone_converter.py /usr/local/bin/zone_converter.py
 
-RUN chmod +x /entrypoint.sh
+RUN chmod +x /usr/local/bin/zone_converter.py
 
-EXPOSE 53/udp 53/tcp 5000
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/zone_converter.py
 
-VOLUME ["/data"]
+EXPOSE 53/udp 53/tcp
 
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bind-records
+data:
+  records.yaml: |-
+{{ .Values.dns.recordsYaml | indent 4 }}
+  named.conf.options: |-
+    options {
+      directory "/var/cache/bind";
+      recursion yes;
+      allow-query { any; };
+      forwarders { 8.8.8.8; };
+      forward only;
+    };
+  named.conf.local: |-
+    zone "{{ .Values.dns.zoneName }}" {
+      type master;
+      file "/etc/bind/zones/{{ .Values.dns.zoneName }}.zone";
+    };

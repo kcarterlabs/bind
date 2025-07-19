@@ -1,10 +1,25 @@
-ns_ip: 10.10.69.72
+zone: kcarterlabs.tech
+soa:
+  primary_ns: ns1.kcarterlabs.tech.
+  admin_email: admin.kcarterlabs.tech.
+  serial: 2025071901
+  refresh: 3600
+  retry: 1800
+  expire: 604800
+  minimum: 86400
 records:
-  - name: home
+  - name: glados
     type: A
     value: 192.168.10.2
     ttl: 300
-  - name: "*"
+  - name: www
+    type: CNAME
+    value: kcarterlabs.tech.
+    ttl: 300
+  - name: ns1
     type: A
-    value: 192.168.10.2
+    value: 10.10.69.72
+  - name: pihole
+    type: A
+    value: 192.168.10.3
     ttl: 300

@@ -1,17 +1,16 @@
-sudo docker build -t bind-flask-dns .
+export CONTAINER_NAME="bind-flask"
 
-sudo docker run -d --rm \
+docker stop $CONTAINER_NAME
+docker rm $CONTAINER_NAME
+
+export IMAGE="bind"
+
+sudo docker build -t $IMAGE .
+
+sudo docker run -d --name $CONTAINER_NAME  \
   -p 53:53/udp \
   -p 53:53/tcp \
-  -p 5000:5000 \
-  -e BIND_ZONE="kcarterlabs.tech" \
-  -e BIND_NS_IP="10.0.0.1" \
-  -e API_KEY="supersecretdnskey" \
-  -v $(pwd)/records.yaml:/data/records.yaml \
-  bind-flask-dns
+  $IMAGE
 
-# curl http://localhost:5000/records
-
-# curl -X POST http://localhost:5000/reload
-
-curl -H "X-API-Key: supersecretdnskey" http://localhost:5000/records
+dig @localhost glados.kcarterlabs.tech
+dig @localhost pihole.kcarterlabs.tech

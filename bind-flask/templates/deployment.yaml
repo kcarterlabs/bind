@@ -1,55 +1,35 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: bind-flask
+  name: bind
 spec:
-  replicas: 1
+  replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      app: bind-flask
+      app: bind
   template:
     metadata:
       labels:
-        app: bind-flask
+        app: bind
     spec:
       containers:
-        - name: bind-flask
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          ports:
-            - containerPort: 53
-              protocol: UDP
-            - containerPort: 53
-              protocol: TCP
-            - containerPort: {{ .Values.service.apiPort }}
-              protocol: TCP
-          env:
-            - name: BIND_ZONE
-              value: "{{ .Values.env.BIND_ZONE }}"
-            - name: BIND_NS_IP
-              value: "{{ .Values.env.BIND_NS_IP }}"
-            - name: API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: bind-secrets
-                  key: apiKey
-          volumeMounts:
-            - name: records
-              mountPath: /data/records.yaml
-              subPath: records.yaml
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: {{ .Values.service.apiPort }}
-            initialDelaySeconds: 5
-            periodSeconds: 10
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: {{ .Values.service.apiPort }}
-            initialDelaySeconds: 15
-            periodSeconds: 20
+      - name: bind
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: 53
+          protocol: UDP
+        - containerPort: 53
+          protocol: TCP
+        volumeMounts:
+        - name: config
+          mountPath: /etc/bind
+        command: ["/bin/bash", "-c"]
+        args:
+          - |
+            /usr/local/bin/zone_converter.py /etc/bind/records.yaml /etc/bind/zones/{{ .Values.dns.zoneName }}.zone && \
+            named -g -c /etc/bind/named.conf
       volumes:
-        - name: records
-          persistentVolumeClaim:
-            claimName: bind-records-pvc
+      - name: config
+        configMap:
+          name: bind-records

@@ -1,21 +1,15 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: bind-flask
+  name: bind
 spec:
   type: {{ .Values.service.type }}
-  selector:
-    app: bind-flask
   ports:
-    - name: dns-udp
-      port: 53
+    - port: {{ .Values.service.port }}
       protocol: UDP
       targetPort: 53
-    - name: dns-tcp
-      port: 53
+    - port: {{ .Values.service.port }}
       protocol: TCP
       targetPort: 53
-    - name: api
-      port: {{ .Values.service.apiPort }}
-      protocol: TCP
-      targetPort: {{ .Values.service.apiPort }}
+  selector:
+    app: bind
