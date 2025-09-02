@@ -2,7 +2,7 @@ zone: kcarterlabs.tech
 soa:
   primary_ns: ns1.kcarterlabs.tech.
   admin_email: admin.kcarterlabs.tech.
-  serial: 2025071901
+  serial: 20250902
   refresh: 3600
   retry: 1800
   expire: 604800
