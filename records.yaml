@@ -16,10 +16,38 @@ records:
     type: CNAME
     value: kcarterlabs.tech.
     ttl: 300
-  - name: ns1
-    type: A
-    value: 10.10.69.72
   - name: pihole
     type: A
-    value: 192.168.10.3
+    value: 10.10.69.72
+  - name: 1u-pve
+    type: A
+    value: 192.168.10.15
+    ttl: 300
+  - name: argocd
+    type: A
+    value: 10.20.69.20
+    ttl: 300
+  - name: rancher 
+    type: A
+    value: 10.10.69.3
+    ttl: 300
+  - name: truenas
+    type: A
+    value: 10.20.69.2
+    ttl: 300
+  - name: hermes
+    type: A
+    value: 192.168.10.1
+    ttl: 300
+  - name: unifi
+    type: A
+    value: 192.168.10.14
+    ttl: 300
+  - name: truenasbackup
+    type: A
+    value: 10.10.69.9
+    ttl: 300
+  - name: proxmoxdev
+    type: A
+    value: 10.10.69.13
     ttl: 300

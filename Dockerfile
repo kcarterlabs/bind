@@ -14,6 +14,8 @@ COPY zone_converter.py /usr/local/bin/zone_converter.py
 
 RUN chmod +x /usr/local/bin/zone_converter.py
 
+RUN chmod 640 /etc/bind/rndc.key && chown root:bind /etc/bind/rndc.key
+
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/zone_converter.py
 
 EXPOSE 53/udp 53/tcp
