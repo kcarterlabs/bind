@@ -54,3 +54,11 @@ records:
     type: A
     value: 10.10.69.13
     ttl: 300
+  - name: pihole2
+    type: A
+    value: 10.10.69.22
+    ttl: 300
+  - name: pihole3
+    type: A
+    value: 10.10.69.23
+    ttl: 300
