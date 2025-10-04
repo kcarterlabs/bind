@@ -3,7 +3,7 @@ options {
     recursion yes;
     allow-query { any; };
     forwarders {
-        8.8.8.8;
+        10.10.69.72;
     };
     forward only;
     listen-on { any; };
