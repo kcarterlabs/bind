@@ -16,6 +16,9 @@ records:
     type: CNAME
     value: kcarterlabs.tech.
     ttl: 300
+  - name: ns1
+    type: A
+    value: 192.168.10.188
   - name: pihole
     type: A
     value: 10.10.69.72
