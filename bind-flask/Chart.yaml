@@ -1,0 +1,4 @@
+apiVersion: v2
+name: bind-flask
+version: 0.1.0
+description: A Helm chart for BIND DNS server
