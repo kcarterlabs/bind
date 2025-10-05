@@ -6,3 +6,68 @@ service:
   port: 53
 dns:
   zoneName: kcarterlabs.tech
+  recordsYaml: |
+    zone: kcarterlabs.tech
+    soa:
+      primary_ns: ns1.kcarterlabs.tech.
+      admin_email: admin.kcarterlabs.tech.
+      serial: 20250902
+      refresh: 3600
+      retry: 1800
+      expire: 604800
+      minimum: 86400
+    records:
+      - name: glados
+        type: A
+        value: 192.168.10.2
+        ttl: 300
+      - name: www
+        type: CNAME
+        value: kcarterlabs.tech.
+        ttl: 300
+      - name: ns1
+        type: A
+        value: 10.10.69.21
+      - name: pihole
+        type: A
+        value: 10.10.69.72
+      - name: 1u-pve
+        type: A
+        value: 192.168.10.15
+        ttl: 300
+      - name: argocd
+        type: A
+        value: 10.20.69.20
+        ttl: 300
+      - name: rancher 
+        type: A
+        value: 10.10.69.3
+        ttl: 300
+      - name: truenas
+        type: A
+        value: 10.20.69.2
+        ttl: 300
+      - name: hermes
+        type: A
+        value: 192.168.10.1
+        ttl: 300
+      - name: unifi
+        type: A
+        value: 192.168.10.14
+        ttl: 300
+      - name: truenasbackup
+        type: A
+        value: 10.10.69.9
+        ttl: 300
+      - name: proxmoxdev
+        type: A
+        value: 10.10.69.13
+        ttl: 300
+      - name: pihole2
+        type: A
+        value: 10.10.69.22
+        ttl: 300
+      - name: pihole3
+        type: A
+        value: 10.10.69.23
+        ttl: 300
