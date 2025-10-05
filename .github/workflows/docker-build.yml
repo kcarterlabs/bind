@@ -17,7 +17,7 @@ jobs:
       CHART_DIR: bind-flask/
       CHART_NAME: bind-flask
       ECR_REGISTRY: 856817629634.dkr.ecr.us-west-2.amazonaws.com
-
+      ECR_HELM_REPO: 856817629634.dkr.ecr.us-west-2.amazonaws.com/bind-flask
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -57,4 +57,4 @@ jobs:
       - name: Push Helm chart to ECR
         run: |
           CHART_FILE=$(ls $CHART_NAME-*.tgz)
-          helm push $CHART_FILE oci://$ECR_REGISTRY
+          helm push $CHART_FILE oci://$ECR_HELM_REPO
