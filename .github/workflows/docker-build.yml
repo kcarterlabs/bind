@@ -57,4 +57,6 @@ jobs:
       - name: Push Helm chart to ECR
         run: |
           CHART_FILE=$(ls $CHART_NAME-*.tgz)
-          helm push $CHART_FILE oci://$ECR_REGISTRY
+          LATEST_CHART_FILE=$(echo $CHART_FILE | sed "s/\.tgz/-latest.tgz/")
+          cp $CHART_FILE $LATEST_CHART_FILE
+          helm push $LATEST_CHART_FILE oci://$ECR_REGISTRY
