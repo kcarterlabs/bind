@@ -1,2 +1,3 @@
 *.tgz
 deploy.sh
+bind-flask/helm-deploy.sh
