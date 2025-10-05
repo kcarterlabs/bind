@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: bind
+  namespace: bind-flask
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
@@ -12,6 +13,8 @@ spec:
       labels:
         app: bind
     spec:
+      imagePullSecrets:
+        - name: ecr-pull-secret
       containers:
       - name: bind
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
