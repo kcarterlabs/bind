@@ -4,3 +4,5 @@ image:
 service:
   type: ClusterIP
   port: 53
+dns:
+  zoneName: kcarterlabs.tech
