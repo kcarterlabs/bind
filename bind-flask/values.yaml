@@ -1,0 +1,6 @@
+image:
+  repository: 856817629634.dkr.ecr.us-west-2.amazonaws.com/bind-flask
+  tag: latest
+service:
+  type: ClusterIP
+  port: 53
