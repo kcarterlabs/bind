@@ -30,6 +30,7 @@ spec:
         command: ["/bin/bash", "-c"]
         args:
           - |
+            mkdir -p /etc/bind/zones && \
             /usr/local/bin/zone_converter.py /etc/bind/records.yaml /etc/bind/zones/{{ .Values.dns.zoneName }}.zone && \
             named -g -c /etc/bind/named.conf
       volumes:
