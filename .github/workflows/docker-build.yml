@@ -45,34 +45,3 @@ jobs:
           # Tag and push as latest only if the above succeeded
           docker tag $REGISTRY/$REPOSITORY:$IMAGE_TAG $REGISTRY/$REPOSITORY:latest && \
           docker push $REGISTRY/$REPOSITORY:latest
-
-      # - name: Build, tag, and push docker image to Amazon ECR (bind-flask)
-      #   id: build-and-push
-      #   env:
-      #     REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-      #     REPOSITORY: bind-flask
-      #     IMAGE_TAG: ${{ github.sha }}
-      #   run: |
-      #     set -euo pipefail
-      #     # build and push only on successful build
-      #     docker build -t $REGISTRY/$REPOSITORY:$IMAGE_TAG . && \
-      #     docker push $REGISTRY/$REPOSITORY:$IMAGE_TAG && \
-      #     # Tag and push as latest only if the above succeeded
-      #     docker tag $REGISTRY/$REPOSITORY:$IMAGE_TAG $REGISTRY/$REPOSITORY:latest && \
-      #     docker push $REGISTRY/$REPOSITORY:latest
-
-      # - name: Package Helm chart
-      #   run: |
-      #     helm package $CHART_DIR --destination .
-
-      # - name: Push Helm chart to ECR
-      #   run: |
-      #     CHART_FILE=$(ls $CHART_NAME-*.tgz)
-      #     helm push $CHART_FILE oci://$ECR_REPO
-
-      # - name: Push Helm chart to ECR
-      #   run: |
-      #     CHART_FILE=$(ls $CHART_NAME-*.tgz)
-      #     LATEST_CHART_FILE=$(echo $CHART_FILE | sed "s/\.tgz/-latest.tgz/")
-      #     cp $CHART_FILE $LATEST_CHART_FILE
-      #     helm push $LATEST_CHART_FILE oci://$ECR_REGISTRY
