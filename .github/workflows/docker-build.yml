@@ -38,11 +38,12 @@ jobs:
           REPOSITORY: kcarterlabs/bind
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t $REGISTRY/$REPOSITORY:$IMAGE_TAG .
-          docker push $REGISTRY/$REPOSITORY:$IMAGE_TAG
-
-          # Tag and push as latest
-          docker tag $REGISTRY/$REPOSITORY:$IMAGE_TAG $REGISTRY/$REPOSITORY:latest
+          set -euo pipefail
+          # build and push only on successful build
+          docker build -t $REGISTRY/$REPOSITORY:$IMAGE_TAG . && \
+          docker push $REGISTRY/$REPOSITORY:$IMAGE_TAG && \
+          # Tag and push as latest only if the above succeeded
+          docker tag $REGISTRY/$REPOSITORY:$IMAGE_TAG $REGISTRY/$REPOSITORY:latest && \
           docker push $REGISTRY/$REPOSITORY:latest
 
       - name: Build, tag, and push docker image to Amazon ECR (bind-flask)
@@ -52,11 +53,12 @@ jobs:
           REPOSITORY: bind-flask
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t $REGISTRY/$REPOSITORY:$IMAGE_TAG .
-          docker push $REGISTRY/$REPOSITORY:$IMAGE_TAG
-
-          # Tag and push as latest
-          docker tag $REGISTRY/$REPOSITORY:$IMAGE_TAG $REGISTRY/$REPOSITORY:latest
+          set -euo pipefail
+          # build and push only on successful build
+          docker build -t $REGISTRY/$REPOSITORY:$IMAGE_TAG . && \
+          docker push $REGISTRY/$REPOSITORY:$IMAGE_TAG && \
+          # Tag and push as latest only if the above succeeded
+          docker tag $REGISTRY/$REPOSITORY:$IMAGE_TAG $REGISTRY/$REPOSITORY:latest && \
           docker push $REGISTRY/$REPOSITORY:latest
 
       # - name: Package Helm chart
