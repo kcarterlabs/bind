@@ -16,7 +16,7 @@ jobs:
       # AWS_REGION: us-west-2
       CHART_DIR: bind-flask/
       CHART_NAME: bind-flask
-      ECR_REGISTRY: 856817629634.dkr.ecr.us-west-2.amazonaws.com
+      ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
 
     steps:
       - name: Checkout repository
@@ -25,7 +25,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4 
         with:
-          role-to-assume: arn:aws:iam::856817629634:role/github-oidc-template-Role-1Y4H3rYHKYvg
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: us-west-2
 
       - name: Login to Amazon ECR
