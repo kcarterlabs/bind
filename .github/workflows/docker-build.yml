@@ -59,18 +59,18 @@ jobs:
           docker tag $REGISTRY/$REPOSITORY:$IMAGE_TAG $REGISTRY/$REPOSITORY:latest
           docker push $REGISTRY/$REPOSITORY:latest
 
-      - name: Package Helm chart
-        run: |
-          helm package $CHART_DIR --destination .
+      # - name: Package Helm chart
+      #   run: |
+      #     helm package $CHART_DIR --destination .
 
       # - name: Push Helm chart to ECR
       #   run: |
       #     CHART_FILE=$(ls $CHART_NAME-*.tgz)
       #     helm push $CHART_FILE oci://$ECR_REPO
 
-      - name: Push Helm chart to ECR
-        run: |
-          CHART_FILE=$(ls $CHART_NAME-*.tgz)
-          LATEST_CHART_FILE=$(echo $CHART_FILE | sed "s/\.tgz/-latest.tgz/")
-          cp $CHART_FILE $LATEST_CHART_FILE
-          helm push $LATEST_CHART_FILE oci://$ECR_REGISTRY
+      # - name: Push Helm chart to ECR
+      #   run: |
+      #     CHART_FILE=$(ls $CHART_NAME-*.tgz)
+      #     LATEST_CHART_FILE=$(echo $CHART_FILE | sed "s/\.tgz/-latest.tgz/")
+      #     cp $CHART_FILE $LATEST_CHART_FILE
+      #     helm push $LATEST_CHART_FILE oci://$ECR_REGISTRY
