@@ -62,3 +62,7 @@ records:
     type: A
     value: 10.10.69.23
     ttl: 300
+  - name: dinner-menu
+    type: A
+    value: 10.10.69.21
+    ttl: 300
