@@ -2,15 +2,21 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-BIND for `kcarterlabs.tech` on networkdocker (10.10.69.21, Ubuntu 24.04). It
-is the LAN's DNS: authoritative for the zone, recursing to the Pi-holes for
-everything else. GitHub Actions builds the image and pushes it to ECR, and
-Ansible deploys it.
+BIND for `kcarterlabs.tech` on every host in `[dns]`: bind-a (10.10.69.26,
+pve5), bind-b (.27, pve4) and, until it's retired, networkdocker (.21, on the
+seasonal 5700G). Each is an identical server from the same records.yaml, no
+zone transfers: authoritative for the zone, forwarding everything else to
+the Pi-holes. GitHub Actions builds the image and pushes it to ECR, and
+Ansible deploys it. `PLAN.md` is the migration onto the minis and its
+cutover steps.
 
 The flow is push to main → CI (validate, build, push `code-<hash>`) → `make
-deploy` (pull that tag, mount records.yaml, reload) → verify. Breaking this
+deploy` (this machine pulls that tag and copies it to each server lacking it,
+mounts records.yaml, reloads) → verify, one server at a time. Breaking this
 breaks DNS for the whole LAN, so run `make test` and `make test-playbook`
-after any change to the image or the role. Neither touches the server.
+after any change to the image or the role. Neither touches the servers. The
+user runs everything against the real hosts and creates the VMs; read-only
+discovery is fine.
 
 ## Commands
 
@@ -20,7 +26,7 @@ make validate       # what CI runs: lint, ansible syntax, compose render, image 
 make test           # local container: every record, live reload, bad edit refused, crash recovery
 make test-playbook  # real playbook vs a DinD copy of networkdocker's pre-Ansible state, registry standing in for ECR
 make release [MSG=..] [YES=1]   # validate, commit, push, watch CI, check, deploy (scripts/release.sh)
-make check / deploy [FORCE=1] / verify / ps / logs
+make check / deploy [FORCE=1] [LIMIT=bind-a] / verify / ps / logs
 make image-tag / ecr-images / ecr-policy
 ```
 
@@ -58,15 +64,26 @@ every build as `<sha>`, `code-<hash>` and `latest`; the deploy pulls
 tag: no pull, no recreate, only the reload handler. Don't add records.yaml or
 the named.conf files to the hash. Both sides must call the same script.
 
+**`bind.yml` is `serial: 1` with `any_errors_fatal`.** Each server is
+deployed and verified before the next starts; a failure leaves the rest
+untouched. The role runs: preflight (`always`), `docker_host` (where
+`bind_manage_docker`), `resolved.yml` (where `bind_manage_resolved`: stub
+listener off, `/etc/resolv.conf` off the stub file only if it's the stock
+symlink), deploy, verify. networkdocker turns both off in its host_vars.
+
+**The image moves from here.** The controller logs in to ECR, pulls, saves
+once to `.render/images/`, and copies and `docker load`s it only on a
+server that lacks the tag. The servers hold no AWS credentials.
+
 **The deploy gate** (preflight, on the controller):
 
 - lint
 - deployed files committed and pushed (`git status`, `origin/main..HEAD`)
 - the tag exists in ECR (`aws ecr describe-images`)
 
-`FORCE=1` skips the git half. The server pulls with its own `~/.aws` as
-`kenny`, not root: kenny is in the docker group, and images are
-daemon-wide.
+`FORCE=1` skips the git half. Preflight also asks each forwarder in
+`named.conf.options` from each server (`scripts/dns-ask.py`, stdlib only):
+a dead one warns, none answering fails.
 
 **Cutover** (`tasks/cutover.yml`, stays in the role, a no-op once done):
 
@@ -93,9 +110,15 @@ a minute.
 - **Ansible prints skipped task headers.** test-playbook sets
   `ANSIBLE_DISPLAY_SKIPPED_HOSTS=false` so that `grep 'TASK [bind : Pull it]'`
   means the task ran.
-- **SSH is as `kenny`**, with passwordless sudo, not `svc-observability`:
-  networkdocker isn't in `~/Code/grafana`'s fleet. Adding it there would
-  create that account and install the fleet Alloy agent.
+- **SSH is as `svc-observability`** (created by `~/Code/grafana`'s
+  bootstrap), except networkdocker: `kenny`, set in its host_vars, because
+  it isn't in the fleet.
+- **Cutover vars are networkdocker's only.** The role defaults are empty
+  lists, which skip `tasks/cutover.yml` everywhere else.
+- **NS records** come from `soa.nameservers` (default `[primary_ns]`);
+  the old image ignores the key, so records.yaml stays compatible.
+- **Regexes in folded (`>-`) Jinja take single backslashes** (`\s`, not
+  `\\s`): Ansible doesn't unescape them there.
 - networkdocker also runs the dinner-menu stack (traefik on 80/443, mongo,
   api, vue), from the same ECR registry. The image prune filters by this
   repository only. Never touch those containers.
@@ -104,5 +127,5 @@ a minute.
 
 ## Not in git
 
-`.render/` (validate output and test scratch). Nothing secret lives in this
-repo; the server's AWS credentials stay on the server.
+`.render/` (validate output, test scratch, saved images). Nothing secret
+lives in this repo; ECR access is this machine's AWS credentials.

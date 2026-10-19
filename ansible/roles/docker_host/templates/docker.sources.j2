@@ -1,0 +1,7 @@
+# Managed by Ansible (~/Code/bind, roles/docker_host). Local edits are overwritten.
+Types: deb
+URIs: https://download.docker.com/linux/ubuntu
+Suites: {{ ansible_distribution_release }}
+Components: stable
+Architectures: {{ 'amd64' if ansible_architecture == 'x86_64' else 'arm64' }}
+Signed-By: /etc/apt/keyrings/docker.asc

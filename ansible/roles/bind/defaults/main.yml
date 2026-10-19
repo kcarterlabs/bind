@@ -12,19 +12,38 @@ bind_repo_root: "{{ playbook_dir }}/.."
 bind_config_files: [records.yaml, named.conf.options, named.conf.local]
 
 # The image CI pushes on every push to main (.github/workflows). The deploy
-# pulls code-<hash> for the code in this checkout (scripts/image-tag.sh, the
+# deploys code-<hash> for the code in this checkout (scripts/image-tag.sh, the
 # same script CI tags with), so the server runs exactly what CI built and a
 # records-only commit doesn't change the image.
 bind_ecr_registry: 856817629634.dkr.ecr.us-west-2.amazonaws.com
 bind_ecr_repository: kcarterlabs/bind
 bind_ecr_region: us-west-2
-# Log the server in to ECR before pulling, with the AWS credentials of the
-# deploy user there (~/.aws, as deploy.sh used). Tests point the registry
-# elsewhere and turn this off.
+# This machine pulls the image from ECR and copies it to each server that
+# lacks it (docker save | docker load), so the servers need no AWS
+# credentials. Log this machine's Docker in to ECR first; tests point the
+# registry elsewhere and turn this off.
 bind_ecr_login: true
+# Where the saved image waits between the pull and the copies.
+bind_image_cache: "{{ bind_repo_root }}/.render/images"
 # Check from this machine that CI has pushed the tag before touching the
 # server (needs AWS credentials here too).
 bind_check_ecr: true
+
+# Install Docker from Docker's apt repository (roles/docker_host) and free port
+# 53 from systemd-resolved's stub listener. Both on by default, for freshly
+# cloned VMs; networkdocker, set up by hand, turns them off.
+bind_manage_docker: true
+bind_manage_resolved: true
+
+# The pre-Ansible setup tasks/cutover.yml removes. Only networkdocker has one
+# (host_vars); elsewhere the cutover is a no-op.
+bind_legacy_container: ""
+bind_legacy_cron_user: root
+bind_legacy_cron_jobs: []
+
+# Preflight asks each forwarder in named.conf.options for example.com, from
+# the server. One that doesn't answer is a warning; none answering fails.
+bind_check_forwarders: true
 
 # Files that must be committed and pushed for a deploy: what the image is
 # built from, and what the deploy mounts. The deploy refuses otherwise, so

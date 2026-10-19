@@ -1,0 +1,66 @@
+---
+# Ubuntu's systemd-resolved listens on 127.0.0.53:53 and 127.0.0.54:53, and
+# Docker can't publish 0.0.0.0:53 while it does. Turn the stub listener off
+# with a drop-in, and point /etc/resolv.conf at resolved's list of real
+# servers (the Pi-holes, from cloud-init): the stub file names 127.0.0.53,
+# which stops answering.
+
+- name: Create resolved's drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/resolved.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Turn off resolved's stub listener
+  ansible.builtin.copy:
+    dest: /etc/systemd/resolved.conf.d/bind-no-stub.conf
+    content: |
+      # Managed by Ansible (~/Code/bind, roles/bind). BIND's container publishes
+      # port 53, which the stub listener would otherwise hold.
+      [Resolve]
+      DNSStubListener=no
+    owner: root
+    group: root
+    mode: "0644"
+  register: bind_resolved_dropin
+  become: true
+
+- name: Look at /etc/resolv.conf
+  ansible.builtin.stat:
+    path: /etc/resolv.conf
+  register: bind_resolv_conf
+  become: true
+
+# Only the stock symlink. Anything else (a file written by hand, by Tailscale,
+# or Docker's in the tests) is somebody else's and stays.
+- name: Point /etc/resolv.conf past the stub
+  ansible.builtin.file:
+    path: /etc/resolv.conf
+    src: /run/systemd/resolve/resolv.conf
+    state: link
+    force: true
+  become: true
+  when:
+    - bind_resolv_conf.stat.islnk | default(false)
+    - bind_resolv_conf.stat.lnk_target is search('stub-resolv.conf$')
+
+- name: Restart systemd-resolved
+  ansible.builtin.systemd_service:
+    name: systemd-resolved
+    state: restarted
+  become: true
+  when: bind_resolved_dropin is changed and not ansible_check_mode
+
+- name: Wait for the stub listener to let go of port 53
+  ansible.builtin.command:
+    argv: [ss, -Hlnptu, "sport = :53"]
+  register: bind_resolved_ss
+  until: "'systemd-resolve' not in bind_resolved_ss.stdout"
+  retries: 10
+  delay: 1
+  changed_when: false
+  become: true
+  when: bind_resolved_dropin is changed and not ansible_check_mode

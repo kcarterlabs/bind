@@ -4,3 +4,6 @@ bind-flask/helm-deploy.sh
 
 # Rendered by `make validate` and the tests.
 .render/
+
+# py_compile in `make validate`.
+__pycache__/

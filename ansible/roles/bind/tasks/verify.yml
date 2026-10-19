@@ -32,6 +32,7 @@
   failed_when: verify_crontab.stdout_lines | select('in', bind_legacy_cron_jobs) | list | length > 0
   check_mode: false
   become: true
+  when: bind_legacy_cron_jobs | length > 0
 
 - name: Check BIND is healthy
   ansible.builtin.command:

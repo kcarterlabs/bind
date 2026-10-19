@@ -19,6 +19,11 @@ serial = soa.get('serial', 'auto')
 if serial == 'auto':
     serial = int(time.time())
 
+# Every server's name goes in the zone's NS set. `nameservers` lists them;
+# without it, the SOA's primary_ns is the only one.
+nameservers = soa.get('nameservers') or [soa['primary_ns']]
+ns_lines = "".join(f"    NS {ns}\n" for ns in nameservers)
+
 zone_content = f"""; BIND zone file generated from YAML
 $TTL {soa.get('minimum', 86400)}
 @ IN SOA {soa['primary_ns']} {soa['admin_email']} (
@@ -28,8 +33,7 @@ $TTL {soa.get('minimum', 86400)}
     {soa['expire']}
     {soa['minimum']}
 )
-    NS {soa['primary_ns']}
-
+{ns_lines}
 """
 
 for r in records:

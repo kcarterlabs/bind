@@ -1,6 +1,12 @@
 ---
-- name: Deploy BIND to the DNS server
+# One server at a time: each is deployed and verified (every record,
+# recursion, healthy) before the next is touched, and a failure stops the
+# run there. A bad change can take down at most one server; the clients'
+# other servers keep answering.
+- name: Deploy BIND to the DNS servers
   hosts: dns
   gather_facts: true
+  serial: 1
+  any_errors_fatal: true
   roles:
     - bind

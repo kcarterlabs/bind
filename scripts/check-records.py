@@ -31,6 +31,16 @@ def main(path):
     for key in SOA_KEYS:
         if key not in soa:
             problems.append(f"soa: missing {key}")
+    nameservers = soa.get("nameservers")
+    if nameservers is not None:
+        if not isinstance(nameservers, list) or not nameservers:
+            problems.append("soa: nameservers must be a non-empty list")
+        else:
+            for ns in nameservers:
+                if not str(ns).endswith("."):
+                    problems.append(f"soa: nameserver `{ns}` must be fully qualified (end with a dot)")
+            if soa.get("primary_ns") not in nameservers:
+                problems.append(f"soa: primary_ns {soa.get('primary_ns')} must be one of the nameservers")
     serial = soa.get("serial", "auto")
     if serial != "auto" and not (isinstance(serial, int) and 0 < serial < 2**32):
         problems.append(f"soa: serial must be `auto` or a 32-bit number, not {serial!r}")

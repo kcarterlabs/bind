@@ -1,0 +1,116 @@
+---
+# Docker CE from Docker's own apt repository, pinned to one major version, so
+# this repo can turn a freshly cloned VM into a DNS server by itself. A copy
+# of ~/Code/traefik's role; keep them alike.
+
+# Before the packages: a daemon installed after this starts with rotation
+# already on. A later change is written but not applied (see below).
+- name: Configure the Docker daemon
+  block:
+    - name: Create /etc/docker and /etc/apt/keyrings
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop: [/etc/docker, /etc/apt/keyrings]
+
+    - name: Write daemon.json
+      ansible.builtin.template:
+        src: daemon.json.j2
+        dest: /etc/docker/daemon.json
+        owner: root
+        group: root
+        mode: "0644"
+      register: docker_daemon_json
+  become: true
+
+# The key and a plain .sources file: both show up in `make check --diff`.
+- name: Add Docker's apt repository
+  block:
+    - name: Fetch Docker's signing key
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        owner: root
+        group: root
+        mode: "0644"
+      register: docker_key
+
+    - name: Write the repository definition
+      ansible.builtin.template:
+        src: docker.sources.j2
+        dest: /etc/apt/sources.list.d/docker.sources
+        owner: root
+        group: root
+        mode: "0644"
+      register: docker_sources
+  become: true
+
+- name: Pin Docker to {{ docker_version }}.x
+  ansible.builtin.template:
+    src: docker.pref.j2
+    dest: /etc/apt/preferences.d/docker
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+# Under --check on a fresh VM the repository was only diffed, so apt can't
+# know the packages yet: report the install, don't attempt it.
+- name: Note a dry run on a VM without Docker's repository
+  ansible.builtin.set_fact:
+    docker_repo_pending: "{{ ansible_check_mode and (docker_key is changed or docker_sources is changed) }}"
+
+- name: Install Docker
+  ansible.builtin.apt:
+    name: "{{ docker_packages }}"
+    state: present
+    update_cache: true
+    # 0 right after the repository is added: a recent `apt update` (cloud-init
+    # runs one at first boot) would otherwise count as fresh, and apt wouldn't
+    # know Docker's packages yet.
+    cache_valid_time: "{{ 0 if docker_key is changed or docker_sources is changed else 3600 }}"
+  register: docker_install
+  become: true
+  when: not docker_repo_pending
+
+- name: Would install Docker
+  ansible.builtin.debug:
+    msg: "Would add Docker's repository and install {{ docker_packages | join(', ') }} ({{ docker_version }}.x)."
+  changed_when: true
+  when: docker_repo_pending
+
+- name: Start Docker, and on boot
+  ansible.builtin.systemd_service:
+    name: docker
+    state: started
+    enabled: true
+  become: true
+  when: not docker_repo_pending
+
+# Log options aren't reloadable, and restarting Docker restarts BIND: that
+# server stops answering for a few seconds. Left to you, at a time of your
+# choosing (one server at a time).
+- name: Note that daemon.json changed on a running daemon
+  ansible.builtin.debug:
+    msg: >-
+      /etc/docker/daemon.json changed on {{ inventory_hostname }}, which already
+      had Docker. It applies at the next Docker restart, which restarts BIND
+      there. Do one server at a time.
+  when:
+    - docker_daemon_json is changed
+    - docker_install is not changed
+    - docker_install is not skipped
+    - not ansible_check_mode
+
+- name: Check Docker and the compose plugin answer
+  ansible.builtin.command:
+    argv: [docker, compose, version, --short]
+  register: compose_version
+  changed_when: false
+  check_mode: false
+  become: true
+  # Under --check on a fresh VM nothing was installed.
+  failed_when: compose_version.rc != 0 and not ansible_check_mode

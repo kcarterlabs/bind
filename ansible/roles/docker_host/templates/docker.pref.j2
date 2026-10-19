@@ -1,0 +1,6 @@
+# Managed by Ansible (~/Code/bind, roles/docker_host). Local edits are overwritten.
+# Docker CE {{ docker_version }}.x only: patch releases with `apt upgrade`, a
+# new major only when docker_version changes in group_vars.
+Package: docker-ce docker-ce-cli docker-ce-rootless-extras
+Pin: version 5:{{ docker_version }}.*
+Pin-Priority: 1001

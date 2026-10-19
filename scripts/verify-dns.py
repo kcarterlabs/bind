@@ -52,7 +52,8 @@ def main():
     soa = dig(args.server, args.port, zone, "SOA") or []
     check(f"{zone} SOA", any(s.startswith(data["soa"]["primary_ns"]) for s in soa), soa)
     ns = dig(args.server, args.port, zone, "NS") or []
-    check(f"{zone} NS {data['soa']['primary_ns']}", data["soa"]["primary_ns"] in ns, ns)
+    for want_ns in data["soa"].get("nameservers") or [data["soa"]["primary_ns"]]:
+        check(f"{zone} NS {want_ns}", want_ns in ns, ns)
 
     for r in data["records"]:
         name = f"{r['name']}.{zone}" if r["name"] != "@" else zone

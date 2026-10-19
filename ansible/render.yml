@@ -7,10 +7,14 @@
   vars_files:
     - inventory/group_vars/dns.yml
     - roles/bind/defaults/main.yml
+    - roles/docker_host/defaults/main.yml
   vars:
     out: "{{ playbook_dir }}/../.render"
     # The same tag tasks/preflight.yml deploys.
     bind_image: "{{ bind_ecr_registry }}/{{ bind_ecr_repository }}:{{ lookup('pipe', bind_repo_root ~ '/scripts/image-tag.sh') }}"
+    # Facts docker_host's templates read, as on the VMs.
+    ansible_distribution_release: noble
+    ansible_architecture: x86_64
   tasks:
     - name: Create the output directory
       ansible.builtin.file:
@@ -23,3 +27,10 @@
         src: roles/bind/templates/compose.yaml.j2
         dest: "{{ out }}/compose.yaml"
         mode: "0644"
+
+    - name: Render docker_host's files
+      ansible.builtin.template:
+        src: "roles/docker_host/templates/{{ item }}.j2"
+        dest: "{{ out }}/{{ item }}"
+        mode: "0644"
+      loop: [daemon.json, docker.sources, docker.pref]

@@ -1,5 +1,5 @@
-# BIND for kcarterlabs.tech on networkdocker (10.10.69.21), deployed from here with Ansible.
-# CI (.github/workflows) still builds the same image and pushes it to ECR on every push to main.
+# BIND for kcarterlabs.tech on every host in [dns] (ansible/inventory/hosts.ini), deployed from here with Ansible,
+# one server at a time. CI (.github/workflows) builds the image and pushes it to ECR on every push to main.
 ANSIBLE := cd ansible &&
 PLAYBOOK := bind.yml
 IMAGE := bind:validate
@@ -8,6 +8,8 @@ ECR_REGION := us-west-2
 
 # FORCE=1 deploys files that aren't committed and pushed (emergencies only).
 FORCE_ARGS := $(if $(FORCE),-e bind_allow_unpushed=true,)
+# LIMIT=bind-a (or bind-a,bind-b) runs the playbook targets on those only.
+LIMIT_ARGS := $(if $(LIMIT),--limit $(LIMIT),)
 
 .DEFAULT_GOAL := help
 
@@ -30,6 +32,8 @@ validate: lint ## Lint, Ansible syntax, render compose, build the image, named-c
 	@rm -rf .render
 	$(ANSIBLE) ansible-playbook render.yml >/dev/null && echo "compose rendered to .render/"
 	@docker compose -f .render/compose.yaml config -q && echo "compose OK"
+	@python3 -m json.tool .render/daemon.json >/dev/null && echo "daemon.json OK"
+	@python3 -m py_compile scripts/dns-ask.py && echo "dns-ask.py OK"
 	@bash -n entrypoint.sh && bash -n bind-reload.sh && echo "shell syntax OK"
 	@docker build -q -t $(IMAGE) . >/dev/null && echo "image builds"
 	@docker run --rm --entrypoint bind-reload $(IMAGE) --no-rndc && echo "named-checkzone + named-checkconf OK"
@@ -39,29 +43,29 @@ test: validate ## Run the image locally: every record, live reload, a bad edit r
 	./scripts/test-local.sh
 
 .PHONY: test-playbook
-test-playbook: ## Run the real playbook against a throwaway Docker-in-Docker "networkdocker", legacy setup included
+test-playbook: ## The real playbook vs a fresh Ubuntu VM stand-in and a Docker-in-Docker copy of networkdocker (legacy setup included)
 	./scripts/test-playbook.sh
 
 .PHONY: ping
-ping: ## Check the server answers and can sudo
+ping: ## Check every server answers and can sudo
 	$(ANSIBLE) ansible dns -m ping
 	$(ANSIBLE) ansible dns -b -m command -a 'id -un'
 
 .PHONY: preflight
-preflight: ## Read-only checks: records lint, Docker, port 53
-	$(ANSIBLE) ansible-playbook $(PLAYBOOK) --tags always --check
+preflight: ## Read-only checks: records lint, pushed, in ECR, Docker, port 53, forwarders answer
+	$(ANSIBLE) ansible-playbook $(PLAYBOOK) $(LIMIT_ARGS) --tags always --check
 
 .PHONY: check
 check: ## Dry run: preflight (pushed? in ECR?) plus a diff of every file it would write
-	$(ANSIBLE) ansible-playbook $(PLAYBOOK) --check --diff --skip-tags verify $(FORCE_ARGS)
+	$(ANSIBLE) ansible-playbook $(PLAYBOOK) $(LIMIT_ARGS) --check --diff --skip-tags verify $(FORCE_ARGS)
 
 .PHONY: release
 release: ## One stop: validate, commit (MSG="..."), push, watch CI push to ECR, check, deploy. YES=1 skips the prompts
 	@./scripts/release.sh
 
 .PHONY: deploy
-deploy: ## Pull this commit's image from ECR and deploy it, then verify. First run replaces bind-flask and its cron jobs
-	$(ANSIBLE) ansible-playbook $(PLAYBOOK) $(FORCE_ARGS)
+deploy: ## Deploy to each server in turn (Docker, image copied from here, records), verifying each before the next
+	$(ANSIBLE) ansible-playbook $(PLAYBOOK) $(LIMIT_ARGS) $(FORCE_ARGS)
 
 .PHONY: image-tag
 image-tag: ## The ECR tag this checkout deploys (code-<hash>)
@@ -79,13 +83,13 @@ ecr-policy: ## Apply ecr-lifecycle-policy.json (keep the last 30 images) to the 
 	  && echo "lifecycle policy applied to $(ECR_REPO)"
 
 .PHONY: verify
-verify: ## Ask the server for every record in records.yaml, from here
-	$(ANSIBLE) ansible-playbook $(PLAYBOOK) --tags verify
+verify: ## Ask every server for every record in records.yaml, from here
+	$(ANSIBLE) ansible-playbook $(PLAYBOOK) $(LIMIT_ARGS) --tags verify
 
 .PHONY: ps
-ps: ## Container status on the server
+ps: ## Container status on every server
 	$(ANSIBLE) ansible dns -b -m command -a 'docker compose --project-directory /opt/bind/compose ps'
 
 .PHONY: logs
-logs: ## Last 100 log lines on the server
+logs: ## Last 100 log lines on every server
 	$(ANSIBLE) ansible dns -b -m command -a 'docker logs --tail 100 bind'

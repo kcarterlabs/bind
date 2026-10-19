@@ -3,6 +3,17 @@
   ansible.builtin.import_tasks: preflight.yml
   tags: [always]
 
+- name: Docker
+  ansible.builtin.import_role:
+    name: docker_host
+  when: bind_manage_docker | bool
+  tags: [docker]
+
+- name: Free port 53
+  ansible.builtin.import_tasks: resolved.yml
+  when: bind_manage_resolved | bool
+  tags: [deploy]
+
 - name: Deploy
   ansible.builtin.import_tasks: deploy.yml
   tags: [deploy]

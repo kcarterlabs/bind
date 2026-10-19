@@ -1,6 +1,9 @@
 zone: kcarterlabs.tech
 soa:
   primary_ns: ns1.kcarterlabs.tech.
+  # Every server's NS name; zone_converter.py writes one NS record each.
+  # ns2 joins when bind-b serves (PLAN.md step 8).
+  nameservers: [ns1.kcarterlabs.tech.]
   admin_email: admin.kcarterlabs.tech.
   # auto: the Unix time when the zone is generated, so it rises on every
   # change without anyone bumping it. A fixed number also works.

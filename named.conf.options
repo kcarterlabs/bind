@@ -5,6 +5,7 @@ options {
     forwarders {
         10.10.69.22;
         10.10.69.23;
+        10.10.69.28;
     };
     forward only;
     listen-on { any; };

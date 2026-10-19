@@ -11,8 +11,9 @@
 
 # --------------------------------------------------------------- image ---
 # The one CI built and pushed for this code (preflight checked it's there).
-# Pulled only when the server doesn't have it yet, so a records-only deploy
-# never talks to ECR.
+# This machine pulls it from ECR and copies it over, only to a server that
+# doesn't have it yet, so a records-only deploy moves no image at all. The
+# servers never talk to ECR and hold no AWS credentials.
 
 - name: Look for the image on the server
   ansible.builtin.command:
@@ -22,24 +23,95 @@
   failed_when: false
   check_mode: false
   become: true
+  when: bind_docker_installed
 
-# As the deploy user, with its ~/.aws, as deploy.sh did. It's in the docker
-# group, and pulled images are the daemon's, so root's compose sees them.
-- name: Log in to ECR
-  ansible.builtin.shell:
-    cmd: >-
-      set -o pipefail &&
-      aws ecr get-login-password --region {{ bind_ecr_region | quote }}
-      | docker login --username AWS --password-stdin {{ bind_ecr_registry | quote }}
-    executable: /bin/bash
-  when: bind_image_present.rc != 0 and bind_ecr_login | bool
-  changed_when: false
-  no_log: true
+# Under --check on a fresh VM there's no Docker to ask: it would need the image.
+- name: Note whether the server needs the image
+  ansible.builtin.set_fact:
+    bind_image_needed: "{{ not bind_docker_installed or bind_image_present.rc != 0 }}"
 
-- name: Pull it
-  ansible.builtin.command:
-    argv: [docker, pull, --quiet, "{{ bind_image }}"]
-  when: bind_image_present.rc != 0
+# Under --check nothing is pulled or copied: say so instead.
+- name: Would copy the image
+  ansible.builtin.debug:
+    msg: "Would pull {{ bind_image }} here (if missing) and copy it to {{ inventory_hostname }}."
+  changed_when: true
+  when: bind_image_needed and ansible_check_mode
+
+- name: Bring the image here and copy it over
+  when: bind_image_needed and not ansible_check_mode
+  vars:
+    bind_image_file: "{{ bind_image_cache }}/bind-{{ bind_image.split(':') | last }}.tar.gz"
+  block:
+    - name: Look for the image here
+      ansible.builtin.command:
+        argv: [docker, image, inspect, --format, "{{ '{{' }}.Id{{ '}}' }}", "{{ bind_image }}"]
+      delegate_to: localhost
+      become: false
+      register: bind_image_local
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Log in to ECR, here
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail &&
+          aws ecr get-login-password --region {{ bind_ecr_region | quote }}
+          | docker login --username AWS --password-stdin {{ bind_ecr_registry | quote }}
+        executable: /bin/bash
+      delegate_to: localhost
+      become: false
+      when: bind_image_local.rc != 0 and bind_ecr_login | bool
+      changed_when: false
+      no_log: true
+
+    - name: Pull it
+      ansible.builtin.command:
+        argv: [docker, pull, --quiet, "{{ bind_image }}"]
+      delegate_to: localhost
+      become: false
+      when: bind_image_local.rc != 0
+
+    - name: Create the image cache
+      ansible.builtin.file:
+        path: "{{ bind_image_cache }}"
+        state: directory
+        mode: "0755"
+      delegate_to: localhost
+      become: false
+
+    # Once per tag; the next server reuses the file.
+    - name: Save it to a file
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail &&
+          docker save {{ bind_image | quote }} | gzip -1 > {{ bind_image_file | quote }}.part &&
+          mv {{ bind_image_file | quote }}.part {{ bind_image_file | quote }}
+        executable: /bin/bash
+        creates: "{{ bind_image_file }}"
+      delegate_to: localhost
+      become: false
+
+    - name: Copy it to the server
+      ansible.builtin.copy:
+        src: "{{ bind_image_file }}"
+        dest: "{{ bind_root }}/image.tar.gz"
+        owner: root
+        group: root
+        mode: "0600"
+      become: true
+
+    - name: Load it
+      ansible.builtin.command:
+        argv: [docker, load, --quiet, --input, "{{ bind_root }}/image.tar.gz"]
+      become: true
+
+    - name: Remove the copy on the server
+      ansible.builtin.file:
+        path: "{{ bind_root }}/image.tar.gz"
+        state: absent
+      become: true
+      changed_when: false
 
 # --------------------------------------------------------------- config ---
 
@@ -106,6 +178,7 @@
 
 # Earlier code versions' images, and the legacy :latest; the current one is
 # in use. Only this repository's, never dinner-menu's from the same registry.
+# Old saved copies here go too.
 - name: List older BIND images
   ansible.builtin.command:
     argv: [docker, image, ls, --filter, "reference={{ bind_ecr_registry }}/{{ bind_ecr_repository }}", --format, "{{ '{{' }}.Repository{{ '}}' }}:{{ '{{' }}.Tag{{ '}}' }}"]
@@ -113,9 +186,32 @@
   changed_when: false
   check_mode: false
   become: true
+  when: bind_docker_installed or not ansible_check_mode
 
 - name: Remove them
   ansible.builtin.command:
     argv: "{{ ['docker', 'image', 'rm'] + (bind_images.stdout_lines | difference([bind_image])) }}"
-  when: bind_images.stdout_lines | difference([bind_image]) | length > 0
+  when:
+    - bind_images is not skipped
+    - bind_images.stdout_lines | difference([bind_image]) | length > 0
   become: true
+
+- name: Find older saved images here
+  ansible.builtin.find:
+    paths: "{{ bind_image_cache }}"
+    patterns: ["bind-*.tar.gz", "bind-*.tar.gz.part"]
+    excludes: ["bind-{{ bind_image.split(':') | last }}.tar.gz"]
+  register: bind_old_saves
+  delegate_to: localhost
+  become: false
+  check_mode: false
+
+- name: Remove them
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ bind_old_saves.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  delegate_to: localhost
+  become: false

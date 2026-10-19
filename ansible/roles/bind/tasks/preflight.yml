@@ -93,6 +93,28 @@
   when: bind_check_ecr | bool
 
 # ------------------------------------------------------------ the server ---
+- name: Look for Docker
+  ansible.builtin.shell:
+    cmd: command -v docker
+  register: bind_docker_binary
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  become: true
+
+# A freshly cloned VM has none: roles/docker_host installs it, right after
+# preflight. A server that should already have it (bind_manage_docker off)
+# and doesn't is an error.
+- name: Note whether Docker is installed
+  ansible.builtin.set_fact:
+    bind_docker_installed: "{{ bind_docker_binary.rc == 0 }}"
+
+- name: Fail if Docker is missing where this repo doesn't install it
+  ansible.builtin.assert:
+    that: bind_docker_installed or bind_manage_docker | bool
+    fail_msg: "{{ inventory_hostname }} has no Docker, and bind_manage_docker is off for it."
+    quiet: true
+
 - name: Check Docker and the compose plugin are running
   ansible.builtin.command:
     argv: [docker, compose, version, --short]
@@ -101,6 +123,7 @@
   failed_when: false
   check_mode: false
   become: true
+  when: bind_docker_installed
 
 - name: Fail if Docker is not up
   ansible.builtin.assert:
@@ -108,11 +131,14 @@
       - compose_version.rc == 0
     fail_msg: "Docker is not running on {{ inventory_hostname }}. ({{ compose_version.stderr | default('') }})"
     quiet: true
+  when: bind_docker_installed
 
 # Port 53 may only be held by Docker on behalf of BIND (the new container or
-# the old one the cutover replaces). Anything else -- systemd-resolved's stub
-# listener coming back after an upgrade, a host dnsmasq -- would make the
-# container fail to start, and DNS would be down until someone noticed.
+# the old one the cutover replaces), or by systemd-resolved's stub listener
+# where tasks/resolved.yml is about to turn it off. Anything else -- the stub
+# coming back on networkdocker after an upgrade, a host dnsmasq -- would make
+# the container fail to start, and that server would be down until someone
+# noticed.
 - name: See which containers publish port 53
   ansible.builtin.command:
     argv: [docker, ps, --filter, "publish=53", --format, "{{ '{{' }}.Names{{ '}}' }}"]
@@ -120,6 +146,7 @@
   changed_when: false
   check_mode: false
   become: true
+  when: bind_docker_installed
 
 - name: See which processes listen on port 53
   ansible.builtin.command:
@@ -131,14 +158,56 @@
 
 - name: Check port 53 is free or BIND's
   vars:
+    owners: "{{ port_owners.stdout_lines | default([]) | difference([bind_container, bind_legacy_container]) }}"
+    allowed: "{{ ['docker-proxy'] + (['systemd-resolve'] if bind_manage_resolved | bool else []) }}"
     processes: "{{ port_listeners.stdout | regex_findall('users:\\(\\(\"([^\"]+)\"') | unique }}"
   ansible.builtin.assert:
     that:
-      - port_owners.stdout_lines | difference([bind_container, bind_legacy_container]) | length == 0
-      - processes | difference(['docker-proxy']) | length == 0
+      - owners | length == 0
+      - processes | difference(allowed) | length == 0
     fail_msg: >-
       Port 53 on {{ inventory_hostname }} is held by something other than BIND:
-      containers {{ port_owners.stdout_lines | difference([bind_container, bind_legacy_container]) }},
-      processes {{ processes | difference(['docker-proxy']) }}. If it is
-      systemd-resolved, set DNSStubListener=no in /etc/systemd/resolved.conf.
+      containers {{ owners }}, processes {{ processes | difference(allowed) }}.
+      If it is systemd-resolved, set DNSStubListener=no in /etc/systemd/resolved.conf.
     quiet: true
+
+# BIND forwards everything outside the zone to these (`forward only`), so a
+# server whose forwarders don't answer it can't resolve the internet. The
+# Pi-holes only answer their own subnet (listeningMode LOCAL), so this asks
+# from the server, not from here.
+- name: Read the forwarders from named.conf.options
+  ansible.builtin.set_fact:
+    bind_forwarders: >-
+      {{ lookup('file', bind_repo_root ~ '/named.conf.options')
+         | regex_findall('forwarders\s*\{[^}]*\}') | first | default('')
+         | regex_findall('[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+') }}
+
+- name: Ask each forwarder for example.com, from the server
+  ansible.builtin.script:
+    cmd: "{{ bind_repo_root }}/scripts/dns-ask.py {{ bind_forwarders | join(' ') }}"
+    executable: python3
+  register: bind_forwarder_check
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: bind_check_forwarders | bool
+
+- name: Warn about forwarders that don't answer
+  ansible.builtin.debug:
+    msg: >-
+      {{ inventory_hostname }} gets no answer from forwarder(s)
+      {{ bind_forwarder_check.stdout_lines | select('search', '^FAIL') | map('regex_replace', '^FAIL ', '') | join(', ') }}.
+      BIND tries the others, but each query sent there waits for a timeout first.
+  when:
+    - bind_check_forwarders | bool
+    - bind_forwarder_check.stdout_lines | select('search', '^FAIL') | list | length > 0
+
+- name: Fail if no forwarder answers
+  ansible.builtin.assert:
+    that: bind_forwarder_check.stdout_lines | select('search', '^ok') | list | length > 0
+    fail_msg: >-
+      No forwarder in named.conf.options ({{ bind_forwarders | join(', ') }}) answers
+      {{ inventory_hostname }}. BIND would serve the zone but resolve nothing else.
+      ({{ bind_forwarder_check.stdout | default('') | trim }} {{ bind_forwarder_check.stderr | default('') | trim }})
+    quiet: true
+  when: bind_check_forwarders | bool

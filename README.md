@@ -1,15 +1,17 @@
 # BIND DNS for kcarterlabs.tech
 
 The LAN's DNS server: authoritative for `kcarterlabs.tech`, recursing to the
-Pi-holes (10.10.69.22, 10.10.69.23) for everything else. It runs as a
-container on **networkdocker (10.10.69.21)**, which is `ns1` and the address
-the grafana repo's DNS probes query.
+Pi-holes (10.10.69.22, .23, .28) for everything else. It runs as an
+identical container on every host in `[dns]`: **bind-a 10.10.69.26** (pve5),
+**bind-b 10.10.69.27** (pve4), and **networkdocker 10.10.69.21** until it
+retires. `PLAN.md` has the migration and its cutover steps. `make deploy`
+does one server at a time and verifies each before the next.
 
 ```
 records.yaml ──push to main──▶ GitHub Actions: validate ─▶ build ─▶ ECR  kcarterlabs/bind:<sha>, code-<hash>, latest
      │                                                                  │
-     └──── make deploy (Ansible) ── ships records.yaml + named.conf ──▶ networkdocker /opt/bind
-                                    pulls code-<hash> from ECR ◀──────────┘   container `bind`, port 53
+     └──── make deploy (Ansible) ── ships records.yaml + named.conf ──▶ each [dns] host, in turn: /opt/bind
+                     pulls code-<hash> here, copies it over ◀──────────┘   container `bind`, port 53
 ```
 
 - **`records.yaml`** is the zone, and the only place records live. Every

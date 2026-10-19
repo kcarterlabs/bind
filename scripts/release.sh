@@ -99,13 +99,13 @@ aws ecr describe-images --region "$REGION" --repository-name "$REPO" --image-ids
 echo "$REPO:$tag is in ECR"
 
 # -------------------------------------------------------- check + deploy
-step "Dry run against networkdocker (make check)"
+step "Dry run against every DNS server (make check)"
 make --no-print-directory check
 
-confirm "Deploy this to networkdocker?" || die "not deployed. Run \`make deploy\` when ready."
+confirm "Deploy this to every DNS server, one at a time?" || die "not deployed. Run \`make deploy\` when ready."
 
 step "Deploy (make deploy)"
 make --no-print-directory deploy
 
 step "Done"
-echo "$(git log -1 --format='%h %s') is live on networkdocker, every record verified."
+echo "$(git log -1 --format='%h %s') is live on every DNS server, every record verified on each."

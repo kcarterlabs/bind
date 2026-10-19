@@ -7,40 +7,46 @@
 # finding no `bind-flask`, runs deploy.sh, which deletes whatever holds port
 # 53 and starts the ECR image. Then the old container, immediately followed
 # by `compose up` in deploy.yml: DNS is down for the few seconds between.
+#
+# Only networkdocker has a legacy setup (host_vars); everywhere else the
+# lists are empty and this is skipped.
 
-- name: Read the legacy user's crontab
-  ansible.builtin.command:
-    argv: [crontab, -u, "{{ bind_legacy_cron_user }}", -l]
-  register: legacy_crontab
-  changed_when: false
-  failed_when: false
-  check_mode: false
-  become: true
+- name: Hand over from the legacy setup
+  when: bind_legacy_container | length > 0 or bind_legacy_cron_jobs | length > 0
+  block:
+    - name: Read the legacy user's crontab
+      ansible.builtin.command:
+        argv: [crontab, -u, "{{ bind_legacy_cron_user }}", -l]
+      register: legacy_crontab
+      changed_when: false
+      failed_when: false
+      check_mode: false
+      become: true
 
-- name: Remove the legacy cron jobs (monitor.sh, @reboot deploy.sh)
-  vars:
-    keep: "{{ legacy_crontab.stdout_lines | reject('in', bind_legacy_cron_jobs) | list }}"
-  ansible.builtin.shell:
-    cmd: crontab -u {{ bind_legacy_cron_user | quote }} -
-    stdin: "{{ keep | join('\n') }}\n"
-  when: legacy_crontab.stdout_lines | select('in', bind_legacy_cron_jobs) | list | length > 0
-  become: true
+    - name: Remove the legacy cron jobs (monitor.sh, @reboot deploy.sh)
+      vars:
+        keep: "{{ legacy_crontab.stdout_lines | reject('in', bind_legacy_cron_jobs) | list }}"
+      ansible.builtin.shell:
+        cmd: crontab -u {{ bind_legacy_cron_user | quote }} -
+        stdin: "{{ keep | join('\n') }}\n"
+      when: legacy_crontab.stdout_lines | select('in', bind_legacy_cron_jobs) | list | length > 0
+      become: true
 
-- name: Look for the legacy container
-  ansible.builtin.command:
-    argv: [docker, inspect, --format, "{{ '{{' }}index .Config.Labels \"com.docker.compose.project\"{{ '}}' }}", "{{ bind_legacy_container }}"]
-  register: legacy_container
-  changed_when: false
-  failed_when: false
-  check_mode: false
-  become: true
+    - name: Look for the legacy container
+      ansible.builtin.command:
+        argv: [docker, inspect, --format, "{{ '{{' }}index .Config.Labels \"com.docker.compose.project\"{{ '}}' }}", "{{ bind_legacy_container }}"]
+      register: legacy_container
+      changed_when: false
+      failed_when: false
+      check_mode: false
+      become: true
 
-# Only a container this repo didn't create: one from compose would carry the
-# project label.
-- name: Remove the legacy container, freeing port 53
-  ansible.builtin.command:
-    argv: [docker, rm, --force, "{{ bind_legacy_container }}"]
-  when:
-    - legacy_container.rc == 0
-    - legacy_container.stdout | trim in ['', '<no value>']
-  become: true
+    # Only a container this repo didn't create: one from compose would carry the
+    # project label.
+    - name: Remove the legacy container, freeing port 53
+      ansible.builtin.command:
+        argv: [docker, rm, --force, "{{ bind_legacy_container }}"]
+      when:
+        - legacy_container.rc == 0
+        - legacy_container.stdout | trim in ['', '<no value>']
+      become: true
