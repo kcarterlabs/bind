@@ -1,12 +1,33 @@
 name: Docker Image CI
 
+# Pull requests: validate only. Pushes to main: validate, then build and push
+# to ECR, where the Ansible deploy (`make deploy`) pulls the image from.
 on:
   push:
     branches:
-      - main 
+      - main
+  pull_request:
 
 jobs:
+  # The same checks as `make validate` on a laptop: records lint, Ansible
+  # syntax, compose render, image build, named-checkzone + named-checkconf.
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Ansible
+        run: |
+          pip install --quiet ansible-core pyyaml
+          ansible-galaxy collection install -r ansible/requirements.yml
+
+      - name: Validate
+        run: make validate
+
   build_docker_image:
+    needs: validate
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions: 
       id-token: write
@@ -39,9 +60,14 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
         run: |
           set -euo pipefail
+          # code-<hash of the image's code>: the tag `make deploy` pulls.
+          CODE_TAG=$(scripts/image-tag.sh)
           # build and push only on successful build
           docker build -t $REGISTRY/$REPOSITORY:$IMAGE_TAG . && \
           docker push $REGISTRY/$REPOSITORY:$IMAGE_TAG && \
-          # Tag and push as latest only if the above succeeded
+          # Tag and push the code tag and latest only if the above succeeded
+          docker tag $REGISTRY/$REPOSITORY:$IMAGE_TAG $REGISTRY/$REPOSITORY:$CODE_TAG && \
+          docker push $REGISTRY/$REPOSITORY:$CODE_TAG && \
           docker tag $REGISTRY/$REPOSITORY:$IMAGE_TAG $REGISTRY/$REPOSITORY:latest && \
           docker push $REGISTRY/$REPOSITORY:latest
+          echo "Pushed $IMAGE_TAG, $CODE_TAG and latest" >> "$GITHUB_STEP_SUMMARY"

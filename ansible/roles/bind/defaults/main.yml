@@ -1,0 +1,47 @@
+---
+bind_config_dir: "{{ bind_root }}/config"
+bind_compose_dir: "{{ bind_root }}/compose"
+
+# The repo root, where records.yaml and the image's files live. The role
+# ships them as they are: there is one records.yaml, used by this deploy,
+# the CI image and (copied) the Helm chart.
+bind_repo_root: "{{ playbook_dir }}/.."
+
+# What the deploy mounts at /etc/bind/managed (BIND_CONFIG_DIR). A change to
+# any of them is a reload, not a restart.
+bind_config_files: [records.yaml, named.conf.options, named.conf.local]
+
+# The image CI pushes on every push to main (.github/workflows). The deploy
+# pulls code-<hash> for the code in this checkout (scripts/image-tag.sh, the
+# same script CI tags with), so the server runs exactly what CI built and a
+# records-only commit doesn't change the image.
+bind_ecr_registry: 856817629634.dkr.ecr.us-west-2.amazonaws.com
+bind_ecr_repository: kcarterlabs/bind
+bind_ecr_region: us-west-2
+# Log the server in to ECR before pulling, with the AWS credentials of the
+# deploy user there (~/.aws, as deploy.sh used). Tests point the registry
+# elsewhere and turn this off.
+bind_ecr_login: true
+# Check from this machine that CI has pushed the tag before touching the
+# server (needs AWS credentials here too).
+bind_check_ecr: true
+
+# Files that must be committed and pushed for a deploy: what the image is
+# built from, and what the deploy mounts. The deploy refuses otherwise, so
+# the server always runs a commit that is on GitHub and was built by CI.
+# `make deploy FORCE=1` sets bind_allow_unpushed for an emergency.
+bind_deploy_files: [Dockerfile, entrypoint.sh, bind-reload.sh, zone_converter.py,
+                    records.yaml, named.conf.options, named.conf.local]
+bind_allow_unpushed: false
+
+bind_container: bind
+bind_zone: "{{ (lookup('file', bind_repo_root ~ '/records.yaml') | from_yaml).zone }}"
+
+# Where verify asks, from this machine: what LAN clients use.
+bind_verify_address: "{{ ansible_host }}"
+# Also check recursion through the forwarders (the Pi-holes). They answer the
+# server's networks; tests run where they don't.
+bind_verify_recursion: true
+
+# How long compose waits for the healthcheck (an SOA query) after a start.
+bind_wait_timeout: 60

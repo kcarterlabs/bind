@@ -1,0 +1,29 @@
+# Managed by Ansible (~/Code/bind, roles/bind). Local edits are overwritten.
+#
+# BIND for {{ bind_zone }}: the image CI built and pushed to ECR for this
+# code (tag = scripts/image-tag.sh). records.yaml and the named.conf files
+# are mounted from ../config; a change there is a reload (`docker exec
+# {{ bind_container }} bind-reload`), not a restart.
+
+name: bind
+
+services:
+  bind:
+    image: {{ bind_image }}
+    container_name: {{ bind_container }}
+    restart: unless-stopped
+    environment:
+      BIND_CONFIG_DIR: /etc/bind/managed
+    volumes:
+      # The directory, not the files: Ansible replaces files by rename, and a
+      # single-file bind mount would keep showing the old one.
+      - {{ bind_config_dir }}:/etc/bind/managed:ro
+    ports:
+      - "53:53/udp"
+      - "53:53/tcp"
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+    # The image's own HEALTHCHECK (an SOA query for {{ bind_zone }}) applies.

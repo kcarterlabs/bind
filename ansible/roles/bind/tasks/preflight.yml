@@ -1,0 +1,144 @@
+---
+# Everything here is read-only and must run under --check too, or `make check`
+# reports a correctly set-up server as broken.
+
+# ------------------------------------------------- on this machine first ---
+
+# The same lint `make validate` and CI run. named-checkzone runs too, inside
+# the container, before every reload.
+- name: Lint records.yaml
+  ansible.builtin.command:
+    argv: [python3, "{{ bind_repo_root }}/scripts/check-records.py", "{{ bind_repo_root }}/records.yaml"]
+  delegate_to: localhost
+  run_once: true
+  become: false
+  changed_when: false
+  check_mode: false
+
+- name: Work out the image tag for this checkout
+  ansible.builtin.command:
+    argv: ["{{ bind_repo_root }}/scripts/image-tag.sh"]
+  delegate_to: localhost
+  run_once: true
+  become: false
+  register: bind_image_tag
+  changed_when: false
+  check_mode: false
+
+- name: Set the image to deploy
+  ansible.builtin.set_fact:
+    bind_image: "{{ bind_ecr_registry }}/{{ bind_ecr_repository }}:{{ bind_image_tag.stdout | trim }}"
+
+# GitHub is the gate: push to main -> CI builds and pushes to ECR -> this
+# pulls it. Deploying uncommitted or unpushed files would put records on
+# the server that GitHub doesn't have, or ask for an image CI never built.
+- name: Look for uncommitted changes to the deployed files
+  ansible.builtin.command:
+    argv: "{{ ['git', '-C', bind_repo_root, 'status', '--porcelain', '--'] + bind_deploy_files }}"
+  delegate_to: localhost
+  run_once: true
+  become: false
+  register: bind_git_dirty
+  changed_when: false
+  check_mode: false
+  when: not (bind_allow_unpushed | bool)
+
+- name: Count commits not yet on origin/main
+  ansible.builtin.command:
+    argv: [git, -C, "{{ bind_repo_root }}", rev-list, --count, origin/main..HEAD]
+  delegate_to: localhost
+  run_once: true
+  become: false
+  register: bind_git_ahead
+  changed_when: false
+  check_mode: false
+  when: not (bind_allow_unpushed | bool)
+
+- name: Check everything deployed is committed and pushed
+  ansible.builtin.assert:
+    that:
+      - bind_git_dirty.stdout | trim | length == 0
+      - bind_git_ahead.stdout | trim == '0'
+    fail_msg: >-
+      {% if bind_git_dirty.stdout | trim %}Uncommitted: {{ bind_git_dirty.stdout_lines | join(', ') }}. {% endif %}
+      {% if bind_git_ahead.stdout | trim != '0' %}{{ bind_git_ahead.stdout | trim }} commit(s) not pushed to origin/main. {% endif %}
+      Commit and push, wait for the "Docker Image CI" run (gh run watch), then deploy.
+      `make deploy FORCE=1` skips this in an emergency.
+    quiet: true
+  when: not (bind_allow_unpushed | bool)
+
+- name: Check CI has pushed the image
+  ansible.builtin.command:
+    argv: [aws, ecr, describe-images, --region, "{{ bind_ecr_region }}", --repository-name, "{{ bind_ecr_repository }}",
+           --image-ids, "imageTag={{ bind_image_tag.stdout | trim }}", --query, "imageDetails[0].imagePushedAt", --output, text]
+  delegate_to: localhost
+  run_once: true
+  become: false
+  register: bind_ecr_image
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: bind_check_ecr | bool
+
+- name: Fail if it isn't in ECR
+  ansible.builtin.assert:
+    that: bind_ecr_image.rc == 0
+    fail_msg: >-
+      {{ bind_image }} is not in ECR. It appears a minute or so after the push
+      to main that changed the image's code (gh run list -R kcarterlabs/bind).
+      If CI succeeded long ago, the lifecycle policy may have expired it:
+      `make ecr-policy` keeps the last 30.
+      ({{ bind_ecr_image.stderr | default('') | trim }})
+    quiet: true
+  when: bind_check_ecr | bool
+
+# ------------------------------------------------------------ the server ---
+- name: Check Docker and the compose plugin are running
+  ansible.builtin.command:
+    argv: [docker, compose, version, --short]
+  register: compose_version
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  become: true
+
+- name: Fail if Docker is not up
+  ansible.builtin.assert:
+    that:
+      - compose_version.rc == 0
+    fail_msg: "Docker is not running on {{ inventory_hostname }}. ({{ compose_version.stderr | default('') }})"
+    quiet: true
+
+# Port 53 may only be held by Docker on behalf of BIND (the new container or
+# the old one the cutover replaces). Anything else -- systemd-resolved's stub
+# listener coming back after an upgrade, a host dnsmasq -- would make the
+# container fail to start, and DNS would be down until someone noticed.
+- name: See which containers publish port 53
+  ansible.builtin.command:
+    argv: [docker, ps, --filter, "publish=53", --format, "{{ '{{' }}.Names{{ '}}' }}"]
+  register: port_owners
+  changed_when: false
+  check_mode: false
+  become: true
+
+- name: See which processes listen on port 53
+  ansible.builtin.command:
+    argv: [ss, -Hlnptu, "sport = :53"]
+  register: port_listeners
+  changed_when: false
+  check_mode: false
+  become: true
+
+- name: Check port 53 is free or BIND's
+  vars:
+    processes: "{{ port_listeners.stdout | regex_findall('users:\\(\\(\"([^\"]+)\"') | unique }}"
+  ansible.builtin.assert:
+    that:
+      - port_owners.stdout_lines | difference([bind_container, bind_legacy_container]) | length == 0
+      - processes | difference(['docker-proxy']) | length == 0
+    fail_msg: >-
+      Port 53 on {{ inventory_hostname }} is held by something other than BIND:
+      containers {{ port_owners.stdout_lines | difference([bind_container, bind_legacy_container]) }},
+      processes {{ processes | difference(['docker-proxy']) }}. If it is
+      systemd-resolved, set DNSStubListener=no in /etc/systemd/resolved.conf.
+    quiet: true

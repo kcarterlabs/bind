@@ -1,0 +1,16 @@
+{
+  "rules": [
+    {
+      "rulePriority": 1,
+      "description": "Untagged images (a code-* or latest tag moved to a newer build) after 7 days",
+      "selection": { "tagStatus": "untagged", "countType": "sinceImagePushed", "countUnit": "days", "countNumber": 7 },
+      "action": { "type": "expire" }
+    },
+    {
+      "rulePriority": 2,
+      "description": "Keep the 30 most recent images, so the deployed one and its rollbacks are always there to pull",
+      "selection": { "tagStatus": "any", "countType": "imageCountMoreThan", "countNumber": 30 },
+      "action": { "type": "expire" }
+    }
+  ]
+}

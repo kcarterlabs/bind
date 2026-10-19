@@ -1,0 +1,10 @@
+---
+# Regenerates the zone from the mounted records.yaml, runs named-checkzone and
+# named-checkconf, and only then `rndc reload`. A bad file fails here, loudly,
+# and named keeps serving the previous zone. No restart: queries keep being
+# answered throughout.
+- name: Reload bind
+  ansible.builtin.command:
+    argv: [docker, exec, "{{ bind_container }}", bind-reload]
+  become: true
+  when: not ansible_check_mode

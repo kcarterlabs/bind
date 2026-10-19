@@ -1,3 +1,6 @@
 *.tgz
 deploy.sh
 bind-flask/helm-deploy.sh
+
+# Rendered by `make validate` and the tests.
+.render/

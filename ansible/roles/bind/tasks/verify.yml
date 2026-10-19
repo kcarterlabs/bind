@@ -1,0 +1,43 @@
+---
+# What a client on the LAN sees: every record in records.yaml asked of the
+# server's address from this machine, plus SOA, NS and recursion. The same
+# script `make test` runs against a local container.
+- name: Ask the server for every record
+  ansible.builtin.command:
+    argv: "{{ ['python3', bind_repo_root ~ '/scripts/verify-dns.py', bind_verify_address,
+              '--records', bind_repo_root ~ '/records.yaml']
+             + ([] if bind_verify_recursion | bool else ['--no-recursion-check']) }}"
+  delegate_to: localhost
+  become: false
+  register: bind_verify
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+- name: Show the result
+  ansible.builtin.debug:
+    msg: "{{ bind_verify.stdout_lines }}"
+
+- name: Fail if any record is wrong
+  ansible.builtin.assert:
+    that: bind_verify.rc == 0
+    fail_msg: "{{ bind_verify.stdout_lines | select('search', 'FAIL') | list }}"
+    quiet: true
+
+- name: Check the legacy cron jobs are gone
+  ansible.builtin.command:
+    argv: [crontab, -u, "{{ bind_legacy_cron_user }}", -l]
+  register: verify_crontab
+  changed_when: false
+  failed_when: verify_crontab.stdout_lines | select('in', bind_legacy_cron_jobs) | list | length > 0
+  check_mode: false
+  become: true
+
+- name: Check BIND is healthy
+  ansible.builtin.command:
+    argv: [docker, inspect, --format, "{{ '{{' }}.State.Health.Status{{ '}}' }}", "{{ bind_container }}"]
+  register: verify_health
+  changed_when: false
+  failed_when: verify_health.stdout | trim != 'healthy'
+  check_mode: false
+  become: true

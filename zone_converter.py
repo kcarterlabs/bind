@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import yaml
 import sys
-from datetime import datetime
+import time
 
 yaml_file = sys.argv[1]
 zone_file = sys.argv[2]
@@ -13,7 +13,11 @@ zone = data['zone']
 soa = data['soa']
 records = data['records']
 
-serial = soa.get('serial', int(datetime.now().strftime("%Y%m%d%H")))
+# `serial: auto` (or none) is the Unix time of generation, so every change
+# gets a higher serial without anyone bumping it. A number is used as is.
+serial = soa.get('serial', 'auto')
+if serial == 'auto':
+    serial = int(time.time())
 
 zone_content = f"""; BIND zone file generated from YAML
 $TTL {soa.get('minimum', 86400)}

@@ -1,18 +1,39 @@
 #!/bin/bash
-set -e
+# Generate the zone from records.yaml, start named, and reload whenever the
+# config directory changes.
+#
+# BIND_CONFIG_DIR (default /etc/bind) holds records.yaml, named.conf.options
+# and named.conf.local. The Ansible deploy mounts its managed copies at
+# /etc/bind/managed and points this there; with nothing mounted (the CI
+# image, a plain `docker run`) the copies baked into the image are used.
+set -euo pipefail
 
-ZONE_PATH="/etc/bind/zones/kcarterlabs.tech.zone"
-YAML_PATH="/etc/bind/records.yaml"
+CONFIG_DIR="${BIND_CONFIG_DIR:-/etc/bind}"
 
-/usr/local/bin/zone_converter.py "$YAML_PATH" "$ZONE_PATH"
+if [ "$CONFIG_DIR" != /etc/bind ]; then
+    # named.conf includes these by absolute path.
+    for f in named.conf.options named.conf.local; do
+        ln -sf "$CONFIG_DIR/$f" "/etc/bind/$f"
+    done
+fi
+
+# Writes the zone and checks it; refuses to start on a broken records.yaml.
+bind-reload --no-rndc
 
 named -g -c /etc/bind/named.conf &
 NAMED_PID=$!
 
-while inotifywait -e modify "$YAML_PATH"; do
-    echo "Detected change in records.yaml"
-    /usr/local/bin/zone_converter.py "$YAML_PATH" "$ZONE_PATH"
-    rndc reload kcarterlabs.tech
-done
+# Watch the directory, not the file: editors, `sed -i`, Ansible's copy and
+# Kubernetes ConfigMap updates all replace files by rename, which a watch on
+# the file itself never sees. A failed reload leaves the old zone serving.
+(
+    while inotifywait -qq -e close_write,moved_to,create "$CONFIG_DIR"; do
+        echo "Change in $CONFIG_DIR, reloading"
+        bind-reload || echo "Reload failed; still serving the previous zone"
+    done
+) &
 
-wait $NAMED_PID
+# named is the container's life: if it dies, the container exits and its
+# restart policy brings it back, rather than the watcher keeping a dead
+# server "running".
+wait "$NAMED_PID"

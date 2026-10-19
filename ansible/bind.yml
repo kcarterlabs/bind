@@ -1,0 +1,6 @@
+---
+- name: Deploy BIND to the DNS server
+  hosts: dns
+  gather_facts: true
+  roles:
+    - bind

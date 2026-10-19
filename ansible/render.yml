@@ -1,0 +1,25 @@
+---
+# Renders compose.yaml locally, for `make validate`. Touches nothing remote.
+- name: Render templates for validation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - inventory/group_vars/dns.yml
+    - roles/bind/defaults/main.yml
+  vars:
+    out: "{{ playbook_dir }}/../.render"
+    # The same tag tasks/preflight.yml deploys.
+    bind_image: "{{ bind_ecr_registry }}/{{ bind_ecr_repository }}:{{ lookup('pipe', bind_repo_root ~ '/scripts/image-tag.sh') }}"
+  tasks:
+    - name: Create the output directory
+      ansible.builtin.file:
+        path: "{{ out }}"
+        state: directory
+        mode: "0755"
+
+    - name: Render compose.yaml
+      ansible.builtin.template:
+        src: roles/bind/templates/compose.yaml.j2
+        dest: "{{ out }}/compose.yaml"
+        mode: "0644"

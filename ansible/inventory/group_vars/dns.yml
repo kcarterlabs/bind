@@ -1,0 +1,18 @@
+---
+# Host-specific values for networkdocker. Checked on 2026-10-18: Ubuntu
+# 24.04.3, Docker 29.1.3 with compose v5.0.0, systemd-resolved with
+# DNSStubListener=no (so port 53 is free for BIND), the old `bind-flask`
+# container serving the zone. Preflight re-checks what matters every run.
+
+# Everything this repo puts on the server lives here.
+bind_root: /opt/bind
+
+# The pre-Ansible setup, removed by the first deploy (tasks/cutover.yml).
+# Both cron jobs must go before the old container does: monitor.sh runs
+# every minute and, finding no `bind-flask`, would run deploy.sh, which
+# deletes whatever holds port 53 and starts the ECR image again.
+bind_legacy_container: bind-flask
+bind_legacy_cron_user: kenny
+bind_legacy_cron_jobs:
+  - "* * * * * /home/kenny/bind/monitor.sh"
+  - "@reboot sleep 30 && /home/kenny/bind/deploy.sh"

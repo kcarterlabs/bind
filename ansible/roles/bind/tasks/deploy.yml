@@ -1,0 +1,121 @@
+---
+- name: Create the BIND directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop: [ "{{ bind_root }}", "{{ bind_config_dir }}", "{{ bind_compose_dir }}" ]
+  become: true
+
+# --------------------------------------------------------------- image ---
+# The one CI built and pushed for this code (preflight checked it's there).
+# Pulled only when the server doesn't have it yet, so a records-only deploy
+# never talks to ECR.
+
+- name: Look for the image on the server
+  ansible.builtin.command:
+    argv: [docker, image, inspect, --format, "{{ '{{' }}.Id{{ '}}' }}", "{{ bind_image }}"]
+  register: bind_image_present
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  become: true
+
+# As the deploy user, with its ~/.aws, as deploy.sh did. It's in the docker
+# group, and pulled images are the daemon's, so root's compose sees them.
+- name: Log in to ECR
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail &&
+      aws ecr get-login-password --region {{ bind_ecr_region | quote }}
+      | docker login --username AWS --password-stdin {{ bind_ecr_registry | quote }}
+    executable: /bin/bash
+  when: bind_image_present.rc != 0 and bind_ecr_login | bool
+  changed_when: false
+  no_log: true
+
+- name: Pull it
+  ansible.builtin.command:
+    argv: [docker, pull, --quiet, "{{ bind_image }}"]
+  when: bind_image_present.rc != 0
+
+# --------------------------------------------------------------- config ---
+
+- name: Copy records.yaml and the named.conf files
+  ansible.builtin.copy:
+    src: "{{ bind_repo_root }}/{{ item }}"
+    dest: "{{ bind_config_dir }}/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ bind_config_files }}"
+  become: true
+  notify: Reload bind
+
+- name: Check whether BIND has been deployed by Ansible before
+  ansible.builtin.stat:
+    path: "{{ bind_compose_dir }}/compose.yaml"
+  register: bind_compose_file
+  become: true
+
+- name: Render compose.yaml
+  ansible.builtin.template:
+    src: compose.yaml.j2
+    dest: "{{ bind_compose_dir }}/compose.yaml"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+# ------------------------------------------------------------- cutover ---
+- name: Hand over from the pre-Ansible setup
+  ansible.builtin.import_tasks: cutover.yml
+
+# ---------------------------------------------------------------- start ---
+# compose's config hash covers compose.yaml, which carries the image tag, so a
+# new image recreates the container. Config changes are the handler's job.
+- name: Bring BIND up
+  community.docker.docker_compose_v2:
+    project_src: "{{ bind_compose_dir }}"
+    state: present
+    pull: never
+    remove_orphans: true
+    wait: true
+    wait_timeout: "{{ bind_wait_timeout }}"
+  become: true
+  when: bind_compose_file.stat.exists or not ansible_check_mode
+
+# Reload now, so the verify tasks see the final records.
+- name: Apply pending reloads
+  ansible.builtin.meta: flush_handlers
+
+# This replaces monitor.sh: Docker's restart policy covers named dying (the
+# container exits with it), and this covers named hanging (the healthcheck
+# fails but the process lives). Restart, never redeploy.
+- name: Restart BIND if its healthcheck fails
+  ansible.builtin.cron:
+    name: bind restart if unhealthy
+    cron_file: bind-healthcheck
+    user: root
+    job: >-
+      [ "$(docker inspect -f '{{ '{{' }}.State.Health.Status{{ '}}' }}' {{ bind_container }} 2>/dev/null)" = unhealthy ]
+      && docker restart {{ bind_container }} >/dev/null
+  become: true
+
+# Earlier code versions' images, and the legacy :latest; the current one is
+# in use. Only this repository's, never dinner-menu's from the same registry.
+- name: List older BIND images
+  ansible.builtin.command:
+    argv: [docker, image, ls, --filter, "reference={{ bind_ecr_registry }}/{{ bind_ecr_repository }}", --format, "{{ '{{' }}.Repository{{ '}}' }}:{{ '{{' }}.Tag{{ '}}' }}"]
+  register: bind_images
+  changed_when: false
+  check_mode: false
+  become: true
+
+- name: Remove them
+  ansible.builtin.command:
+    argv: "{{ ['docker', 'image', 'rm'] + (bind_images.stdout_lines | difference([bind_image])) }}"
+  when: bind_images.stdout_lines | difference([bind_image]) | length > 0
+  become: true
