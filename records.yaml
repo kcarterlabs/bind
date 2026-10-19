@@ -39,9 +39,9 @@ records:
     type: A
     value: 10.10.69.3
     ttl: 300
-  - name: truenas
+  - name: truenas         # the UI, via Traefik; https://10.20.69.2 still works
     type: A
-    value: 10.20.69.2
+    value: 10.10.69.30
     ttl: 300
   - name: hermes
     type: A
@@ -73,47 +73,49 @@ records:
     ttl: 300
 
   # ---- Apps on the TrueNAS NAS (10.20.69.2), deployed from ~/Code ----
-  # A records name the host; each app still has its own port until Traefik
-  # is in front (e.g. http://immich.kcarterlabs.tech:2283).
-  - name: immich          # ~/Code/immich, :2283
+  # Routed names point at the Traefik VIP (~/Code/traefik, traefik_routes):
+  # https://<name>.kcarterlabs.tech, no port. Each app still answers on
+  # http://10.20.69.2:<port>. immich stays on the NAS until the phone app's
+  # server URL is switched to https://immich.kcarterlabs.tech.
+  - name: immich          # ~/Code/immich, :2283 (not yet via Traefik)
     type: A
     value: 10.20.69.2
     ttl: 300
   - name: homarr          # ~/Code/homarr, :7575
     type: A
-    value: 10.20.69.2
+    value: 10.10.69.30
     ttl: 300
   - name: freshrss        # ~/Code/selfhost, :8282
     type: A
-    value: 10.20.69.2
+    value: 10.10.69.30
     ttl: 300
   - name: searxng         # ~/Code/selfhost, :8888
     type: A
-    value: 10.20.69.2
+    value: 10.10.69.30
     ttl: 300
   - name: prowlarr        # ~/Code/arr_stack, :9696
     type: A
-    value: 10.20.69.2
+    value: 10.10.69.30
     ttl: 300
   - name: radarr          # ~/Code/arr_stack, :7878
     type: A
-    value: 10.20.69.2
+    value: 10.10.69.30
     ttl: 300
   - name: sonarr          # ~/Code/arr_stack, :8989
     type: A
-    value: 10.20.69.2
+    value: 10.10.69.30
     ttl: 300
   - name: lidarr          # ~/Code/arr_stack, :8686
     type: A
-    value: 10.20.69.2
+    value: 10.10.69.30
     ttl: 300
   - name: bazarr          # ~/Code/arr_stack, :6767
     type: A
-    value: 10.20.69.2
+    value: 10.10.69.30
     ttl: 300
   - name: tdarr           # ~/Code/arr_stack, :8265
     type: A
-    value: 10.20.69.2
+    value: 10.10.69.30
     ttl: 300
 
   # ---- Observability stacks (~/Code/grafana), both full copies ----
@@ -125,9 +127,9 @@ records:
     type: A
     value: 10.10.69.13
     ttl: 300
-  - name: grafana         # mother-brain
+  - name: grafana         # mother-brain, via Traefik
     type: A
-    value: 10.10.69.14
+    value: 10.10.69.30
     ttl: 300
 
   # ---- Gol-D-Roger VM (~/Code/qbitorrent) ----
@@ -135,7 +137,35 @@ records:
     type: A
     value: 10.10.69.25
     ttl: 300
-  - name: qbittorrent     # :8080, behind PIA
+  - name: qbittorrent     # :8080, behind PIA; via Traefik
     type: A
-    value: 10.10.69.25
+    value: 10.10.69.30
+    ttl: 300
+
+  # ---- Traefik ingress pair (~/Code/traefik) ----
+  - name: traefik         # the dashboard, on the VIP
+    type: A
+    value: 10.10.69.30
+    ttl: 300
+  - name: traefik-a       # VM 401 on pve4
+    type: A
+    value: 10.10.69.31
+    ttl: 300
+  - name: traefik-b       # VM 203 on pve2
+    type: A
+    value: 10.10.69.32
+    ttl: 300
+
+  # ---- DNS on the Lenovo minis (PLAN.md) ----
+  - name: bind-a          # VM 501 on pve5
+    type: A
+    value: 10.10.69.26
+    ttl: 300
+  - name: bind-b          # VM 402 on pve4
+    type: A
+    value: 10.10.69.27
+    ttl: 300
+  - name: pihole4         # VM 204 on pve2
+    type: A
+    value: 10.10.69.28
     ttl: 300
