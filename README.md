@@ -26,11 +26,30 @@ records.yaml ──push to main──▶ GitHub Actions: validate ─▶ build �
 
 ```bash
 $EDITOR records.yaml
-make lint                # fast: names, IPs, duplicates, CNAME conflicts
-make test                # optional: a real container on this machine answers every record
-git commit -am "dns: add foo" && git push
+make release MSG="dns: add foo"
+```
+
+`make release` (`scripts/release.sh`) is the whole loop, stopping at the
+first thing that fails:
+
+1. refuses unless on `main` and not behind `origin/main`
+2. `make validate`, so a change CI would reject never gets pushed
+3. shows what changed, asks, commits (`MSG=`) and pushes. Skipped when
+   there's nothing to commit or push, so re-running after a failure picks
+   up where it stopped.
+4. finds the CI run for that exact commit and watches it until it pushes
+   the image to ECR. A failed run stops here.
+5. checks ECR has `code-<hash>`
+6. `make check`, then asks before `make deploy` (which ends by digging every
+   record from this machine)
+
+`YES=1` answers yes to both questions (it then needs `MSG=` if there is
+anything to commit). The same steps by hand:
+
+```bash
+make lint && git commit -am "dns: add foo" && git push
 gh run watch             # CI: validate, build, push to ECR (~1 min)
-make deploy              # reload on networkdocker, then dig every record from here
+make check && make deploy
 ```
 
 A records-only change is a reload, not a restart: queries keep being answered
@@ -52,6 +71,7 @@ recreates the container, a second or two without DNS.
 | `make test` | The image on 127.0.0.1:15353 as the deploy runs it: every record, an edit picked up live, a broken edit refused, recovery after named crashes |
 | `make test-playbook` | The real playbook against a Docker-in-Docker copy of networkdocker as it is today (`bind-flask`, the old cron jobs): cutover, `changed=0` on re-run, reload vs recreate, failed pulls, the push gate |
 | `make check` | Dry run against the server: preflight plus a diff of every file |
+| `make release` | Validate, commit (`MSG=`), push, watch CI push to ECR, check, deploy. `YES=1` skips the prompts |
 | `make deploy` | Deploy and verify. `FORCE=1` skips the committed-and-pushed check (emergencies) |
 | `make verify` | Ask the server for every record in records.yaml, from this machine |
 | `make ps` / `make logs` | Container status / recent logs on the server |

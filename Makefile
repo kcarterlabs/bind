@@ -55,6 +55,10 @@ preflight: ## Read-only checks: records lint, Docker, port 53
 check: ## Dry run: preflight (pushed? in ECR?) plus a diff of every file it would write
 	$(ANSIBLE) ansible-playbook $(PLAYBOOK) --check --diff --skip-tags verify $(FORCE_ARGS)
 
+.PHONY: release
+release: ## One stop: validate, commit (MSG="..."), push, watch CI push to ECR, check, deploy. YES=1 skips the prompts
+	@./scripts/release.sh
+
 .PHONY: deploy
 deploy: ## Pull this commit's image from ECR and deploy it, then verify. First run replaces bind-flask and its cron jobs
 	$(ANSIBLE) ansible-playbook $(PLAYBOOK) $(FORCE_ARGS)

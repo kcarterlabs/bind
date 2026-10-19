@@ -19,6 +19,7 @@ make lint           # records.yaml only
 make validate       # what CI runs: lint, ansible syntax, compose render, image build, named-checkzone/-checkconf
 make test           # local container: every record, live reload, bad edit refused, crash recovery
 make test-playbook  # real playbook vs a DinD copy of networkdocker's pre-Ansible state, registry standing in for ECR
+make release [MSG=..] [YES=1]   # validate, commit, push, watch CI, check, deploy (scripts/release.sh)
 make check / deploy [FORCE=1] / verify / ps / logs
 make image-tag / ecr-images / ecr-policy
 ```
