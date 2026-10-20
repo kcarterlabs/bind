@@ -17,8 +17,9 @@ records.yaml ──push to main──▶ GitHub Actions: validate ─▶ build �
 - **`records.yaml`** is the zone, and the only place records live. Every
   host, VM and app in `~/Code` has a name: `immich`, `homarr`, `freshrss`,
   `searxng`, the `*arr`s, `grafana`/`mother-brain`/`grafana-2`, `qbittorrent`
-  and so on. An A record names the host, so apps still need their port
-  (`http://immich.kcarterlabs.tech:2283`) until Traefik is in front.
+  and so on. Names routed by Traefik point at its VIP, 10.10.69.30, and are
+  opened as `https://<name>.kcarterlabs.tech`. Any other A record names the
+  host, so its app still needs the port.
 - **CI** runs the same `make validate` on every push and pull request, and
   on main builds the image and pushes it to ECR.
 - **Ansible** deploys only what is committed and pushed: it pulls the image
@@ -120,6 +121,38 @@ server:
 - a healthcheck (SOA query), and `/etc/cron.d/bind-healthcheck`, which
   restarts the container if the healthcheck fails (named hung). Together
   these replace monitor.sh.
+
+## The Pi-holes
+
+BIND forwards everything outside `kcarterlabs.tech` to three Pi-holes:
+**pihole2 10.10.69.22** (pve5), **pihole3 .23** (pve4), **pihole4 .28**
+(pve2). They're native Pi-hole v6 installs on Ubuntu VMs. `pihole.yml` keeps
+them identical, to `ansible/inventory/group_vars/pihole.yml`:
+
+- **settings:** upstreams, listening mode, blocking mode, query logging, and
+  so on. Only the keys listed there are managed, through `pihole-FTL
+  --config`. The web password, TLS and version defaults stay as each host
+  has them.
+- **blocklists**, and **allow and deny lists** (exact or regex). These are
+  the whole set: anything else on a Pi-hole is removed. A blocklist change
+  rebuilds gravity (`pihole -g`), and a domains change runs
+  `pihole reloadlists`.
+
+`scripts/pihole-sync.py` does the comparing and the changes on each host
+(through Ansible's script module; nothing stays on the host). One Pi-hole at
+a time, each verified on 127.0.0.1 before the next: a normal name resolves,
+and a blocklist domain and every deny entry answer `0.0.0.0`.
+
+| Target | What it does |
+|---|---|
+| `make test-pihole` | The playbook against throwaway Pi-hole containers on FTL 6.2.3 and 6.8, with seeded drift: dry run, fix, gravity, domains-only reload, `changed=0`, an unknown setting refused |
+| `make pihole-check` | What would change on each Pi-hole. Read-only |
+| `make pihole-deploy` | Apply, one at a time. `LIMIT=pihole2` for one |
+| `make pihole-verify` | Resolve and block checks only |
+
+Installing Pi-hole and upgrading it (`pihole -up`) are still done by hand,
+one host at a time. On 2026-10-20, pihole2 and pihole3 ran Pi-hole 6.1.4 /
+FTL 6.2.3, and pihole4 ran 6.5 / FTL 6.8.
 
 ## Kubernetes
 

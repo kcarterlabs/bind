@@ -1,0 +1,11 @@
+---
+# The Pi-holes, to the state in group_vars/pihole.yml. One at a time, each
+# verified (resolves, blocks) before the next: BIND forwards to all three, so
+# one Pi-hole out costs nothing.
+- name: Configure the Pi-holes
+  hosts: pihole
+  gather_facts: false
+  serial: 1
+  any_errors_fatal: true
+  roles:
+    - pihole

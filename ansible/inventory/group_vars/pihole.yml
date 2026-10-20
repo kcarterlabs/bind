@@ -1,0 +1,53 @@
+---
+# What every Pi-hole in [pihole] is: pihole.yml makes them so, one at a time
+# (scripts/pihole-sync.py). Native installs (Pi-hole v6 on Ubuntu 24.04),
+# managed by hand until 2026-10-20; read from all three then, and they
+# matched apart from query logging (off on pihole2) and the version.
+#
+# BIND (named.conf.options) forwards everything outside kcarterlabs.tech to
+# all three, so this is the LAN's recursion and ad blocking.
+
+# ------------------------------------------------------------ settings ---
+# pihole.toml keys, set with `pihole-FTL --config`. Only these are managed;
+# everything else stays as the host has it (the web password, TLS, and
+# defaults that differ by version). A key the host's FTL doesn't know fails
+# the run before anything changes.
+pihole_settings:
+  # Google, as on every Pi-hole since it was built.
+  dns.upstreams: [8.8.8.8, 8.8.4.4]
+  # Answer only hosts on the Pi-hole's own subnet (10.10.69.0/24: BIND, the
+  # servers) and loopback. Clients reach them through BIND.
+  dns.listeningMode: LOCAL
+  # Blocked names answer 0.0.0.0.
+  dns.blocking.active: true
+  dns.blocking.mode: "NULL"
+  dns.bogusPriv: true
+  dns.dnssec: false
+  # The internal zone is BIND's; the Pi-holes hold no local records.
+  dns.hosts: []
+  dns.cnameRecords: []
+  dns.revServers: []
+  # Logged, with names: what you need to see why something is blocked.
+  dns.queryLogging: true
+  misc.privacylevel: 0
+  database.maxDBdays: 91
+  dhcp.active: false
+
+# ----------------------------------------------------------- blocklists ---
+# The whole set: a list on a Pi-hole but not here is removed. A change runs
+# `pihole -g` (gravity: download and rebuild) on each host.
+pihole_adlists:
+  - https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts
+
+# ------------------------------------------------- allow and deny lists ---
+# Also the whole set. Exact names, or regexes for the *_regex lists. A change
+# runs `pihole reloadlists`.
+pihole_domains:
+  allow: []
+  deny: []
+  allow_regex: []
+  deny_regex: []
+
+# verify asks each Pi-hole, on 127.0.0.1, for this (must resolve), a domain
+# from its gravity and every exact `deny` entry (must answer 0.0.0.0).
+pihole_verify_name: example.com

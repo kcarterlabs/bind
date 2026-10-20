@@ -75,11 +75,10 @@ records:
   # ---- Apps on the TrueNAS NAS (10.20.69.2), deployed from ~/Code ----
   # Routed names point at the Traefik VIP (~/Code/traefik, traefik_routes):
   # https://<name>.kcarterlabs.tech, no port. Each app still answers on
-  # http://10.20.69.2:<port>. immich stays on the NAS until the phone app's
-  # server URL is switched to https://immich.kcarterlabs.tech.
-  - name: immich          # ~/Code/immich, :2283 (not yet via Traefik)
+  # http://10.20.69.2:<port>.
+  - name: immich          # ~/Code/immich, :2283
     type: A
-    value: 10.20.69.2
+    value: 10.10.69.30
     ttl: 300
   - name: homarr          # ~/Code/homarr, :7575
     type: A

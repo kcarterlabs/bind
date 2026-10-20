@@ -33,7 +33,8 @@ validate: lint ## Lint, Ansible syntax, render compose, build the image, named-c
 	$(ANSIBLE) ansible-playbook render.yml >/dev/null && echo "compose rendered to .render/"
 	@docker compose -f .render/compose.yaml config -q && echo "compose OK"
 	@python3 -m json.tool .render/daemon.json >/dev/null && echo "daemon.json OK"
-	@python3 -m py_compile scripts/dns-ask.py && echo "dns-ask.py OK"
+	$(ANSIBLE) ansible-playbook pihole.yml --syntax-check >/dev/null && echo "pihole.yml OK"
+	@python3 -m py_compile scripts/dns-ask.py scripts/pihole-sync.py && echo "dns-ask.py, pihole-sync.py OK"
 	@bash -n entrypoint.sh && bash -n bind-reload.sh && echo "shell syntax OK"
 	@docker build -q -t $(IMAGE) . >/dev/null && echo "image builds"
 	@docker run --rm --entrypoint bind-reload $(IMAGE) --no-rndc && echo "named-checkzone + named-checkconf OK"
@@ -93,3 +94,23 @@ ps: ## Container status on every server
 .PHONY: logs
 logs: ## Last 100 log lines on every server
 	$(ANSIBLE) ansible dns -b -m command -a 'docker logs --tail 100 bind'
+
+# ------------------------------------------------------------- Pi-holes ---
+# pihole.yml: the Pi-holes BIND forwards to ([pihole]), to the state in
+# group_vars/pihole.yml. LIMIT=pihole2 works here too.
+
+.PHONY: test-pihole
+test-pihole: ## pihole.yml vs throwaway Pi-hole containers (FTL 6.2.3 and 6.8): plan, apply, changed=0, lists, refusals
+	./scripts/test-pihole.sh
+
+.PHONY: pihole-check
+pihole-check: ## Dry run: what would change on each Pi-hole (read-only)
+	$(ANSIBLE) ansible-playbook pihole.yml $(LIMIT_ARGS) --check
+
+.PHONY: pihole-deploy
+pihole-deploy: ## Apply group_vars/pihole.yml, one Pi-hole at a time, each verified before the next
+	$(ANSIBLE) ansible-playbook pihole.yml $(LIMIT_ARGS)
+
+.PHONY: pihole-verify
+pihole-verify: ## On each Pi-hole: a normal name resolves, a blocklist domain and every deny entry are blocked
+	$(ANSIBLE) ansible-playbook pihole.yml $(LIMIT_ARGS) --tags verify

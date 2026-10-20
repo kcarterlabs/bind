@@ -28,6 +28,7 @@ make test-playbook  # real playbook vs a DinD copy of networkdocker's pre-Ansibl
 make release [MSG=..] [YES=1]   # validate, commit, push, watch CI, check, deploy (scripts/release.sh)
 make check / deploy [FORCE=1] [LIMIT=bind-a] / verify / ps / logs
 make image-tag / ecr-images / ecr-policy
+make test-pihole / pihole-check / pihole-deploy [LIMIT=pihole2] / pihole-verify
 ```
 
 ## Architecture
@@ -124,6 +125,34 @@ a minute.
   repository only. Never touch those containers.
 - systemd-resolved runs with `DNSStubListener=no`. Preflight fails if
   anything but Docker holds port 53.
+
+## The Pi-holes (`pihole.yml`)
+
+A second, independent playbook for `[pihole]` (pihole2/3/4, native Pi-hole
+v6), from `group_vars/pihole.yml`. Every step runs `scripts/pihole-sync.py`
+on the host through the script module (`plan`, `apply`, `verify`), with the
+desired state as base64 JSON on its command line.
+
+- **Settings:** only the listed `pihole.toml` keys. Read with `tomllib`, and
+  written with `pihole-FTL --config KEY VALUE` (arrays as JSON). A key the
+  host's FTL doesn't know fails `plan`, so nothing changes. Key names differ
+  between FTL versions (`dns.domain` vs `dns.domain.name`), so manage only
+  keys that exist in every version on the LAN.
+- **Lists:** `adlist` (type 0 only) and `domainlist` in `gravity.db` are the
+  whole set, with rows added, enabled or deleted directly. Blocklists changed
+  → `pihole -g`. Only domains changed → `pihole reloadlists`.
+- **Plan under `--check`:** the "Say what would change" debug task reports
+  `changed` in check mode only, so `make pihole-check` counts drift and a
+  real run stays changed=0 when nothing differs.
+- **Verify is on the host, against 127.0.0.1:** `listeningMode: LOCAL`
+  ignores this laptop's subnet. It skips hosts-file boilerplate (localhost,
+  broadcasthost) when it picks a gravity domain.
+- **`make test-pihole`** runs `pihole/pihole:2025.06.2` (FTL 6.2.3) and
+  `2026.10.0` (6.8), Alpine, with `apk add python3`. Never open
+  `gravity.db` before the image's first gravity run: sqlite creates it empty,
+  and start.sh then skips building it.
+- **`make release` runs `git add -A`**, so Pi-hole changes ride along with
+  whatever records change is being released.
 
 ## Not in git
 

@@ -1,0 +1,100 @@
+---
+# Every step goes through scripts/pihole-sync.py, run on the Pi-hole by the
+# script module: nothing of this repo is left on the host. The desired state
+# travels as base64 JSON on its command line.
+- name: Build the desired state
+  ansible.builtin.set_fact:
+    pihole_state_b64: >-
+      {{ {'settings': pihole_settings, 'adlists': pihole_adlists, 'domains': pihole_domains,
+          'verify_name': pihole_verify_name} | to_json | b64encode }}
+  tags: [always]
+
+# ------------------------------------------------------------ preflight ---
+- name: Look for Pi-hole v6's config
+  ansible.builtin.stat:
+    path: /etc/pihole/pihole.toml
+  register: pihole_toml
+  tags: [always]
+
+- name: Check this is a Pi-hole v6
+  ansible.builtin.assert:
+    that: pihole_toml.stat.exists
+    fail_msg: /etc/pihole/pihole.toml is missing on {{ inventory_hostname }}; this playbook manages Pi-hole v6 only.
+    quiet: true
+  tags: [always]
+
+# Read-only, so it runs under --check too. Also the check that every key in
+# pihole_settings exists in this FTL version: an unknown one fails here,
+# before anything changes.
+- name: Compare the Pi-hole with group_vars/pihole.yml
+  ansible.builtin.script:
+    cmd: "{{ playbook_dir }}/../scripts/pihole-sync.py plan {{ pihole_state_b64 }}"
+    executable: python3
+  register: pihole_plan_run
+  changed_when: false
+  check_mode: false
+  become: true
+  tags: [always]
+
+- name: Say what would change
+  ansible.builtin.debug:
+    msg: >-
+      {% set p = pihole_plan_run.stdout | from_json %}
+      {%- for s in p.settings %}{{ s.key }}: {{ s.from | to_json }} -> {{ s.to | to_json }}; {% endfor %}
+      {%- for k, v in p.adlists.items() if v %}blocklists {{ k }}: {{ v | join(', ') }}; {% endfor %}
+      {%- for k, v in p.domains.items() if v %}domains {{ k }}: {{ v | map(attribute='domain') | join(', ') }}; {% endfor %}
+      {{- '' if p.changed else 'nothing to change' }}
+  # Shown as a change under --check, so `make pihole-check` counts them.
+  changed_when: ansible_check_mode and (pihole_plan_run.stdout | from_json).changed
+  tags: [always]
+
+# --------------------------------------------------------------- deploy ---
+- name: Apply settings, blocklists and domains
+  ansible.builtin.script:
+    cmd: "{{ playbook_dir }}/../scripts/pihole-sync.py apply {{ pihole_state_b64 }}"
+    executable: python3
+  register: pihole_apply_run
+  become: true
+  when: (pihole_plan_run.stdout | from_json).changed and not ansible_check_mode
+
+- name: Note what was applied
+  ansible.builtin.set_fact:
+    pihole_applied: "{{ pihole_apply_run.stdout | from_json }}"
+  when: pihole_apply_run is changed
+
+# Downloads every blocklist and rebuilds gravity.db; FTL reloads it. A
+# minute or two, during which the old gravity keeps answering.
+- name: Rebuild gravity (blocklists changed)
+  ansible.builtin.command:
+    argv: [pihole, -g]
+  become: true
+  when: pihole_applied is defined and pihole_applied.gravity
+
+- name: Reload the allow and deny lists
+  ansible.builtin.command:
+    argv: [pihole, reloadlists]
+  become: true
+  when: pihole_applied is defined and pihole_applied.reload and not pihole_applied.gravity
+
+# --------------------------------------------------------------- verify ---
+# On the host, against 127.0.0.1: listeningMode LOCAL ignores this laptop's
+# subnet. Retried, since FTL reloads after a change.
+- name: Check it resolves and blocks
+  ansible.builtin.script:
+    cmd: "{{ playbook_dir }}/../scripts/pihole-sync.py verify {{ pihole_state_b64 }}"
+    executable: python3
+  register: pihole_verify_run
+  until: (pihole_verify_run.stdout | from_json).ok
+  retries: 10
+  delay: 3
+  changed_when: false
+  failed_when: not (pihole_verify_run.stdout | from_json).ok
+  become: true
+  when: not ansible_check_mode
+  tags: [verify]
+
+- name: Show the checks
+  ansible.builtin.debug:
+    msg: "{{ (pihole_verify_run.stdout | from_json).checks | map(attribute='name') | zip((pihole_verify_run.stdout | from_json).checks | map(attribute='got')) | map('join', ' -> ') | list }}"
+  when: not ansible_check_mode
+  tags: [verify]
