@@ -51,3 +51,8 @@ pihole_domains:
 # verify asks each Pi-hole, on 127.0.0.1, for this (must resolve), a domain
 # from its gravity and every exact `deny` entry (must answer 0.0.0.0).
 pihole_verify_name: example.com
+
+# Where the other Pi-holes ask this one before an upgrade
+# (pihole-upgrade.yml): its LAN address. Here rather than in a role, so
+# every host can read every other's. Test inventories set it.
+pihole_address: "{{ ansible_host }}"

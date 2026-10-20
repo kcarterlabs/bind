@@ -34,6 +34,7 @@ validate: lint ## Lint, Ansible syntax, render compose, build the image, named-c
 	@docker compose -f .render/compose.yaml config -q && echo "compose OK"
 	@python3 -m json.tool .render/daemon.json >/dev/null && echo "daemon.json OK"
 	$(ANSIBLE) ansible-playbook pihole.yml --syntax-check >/dev/null && echo "pihole.yml OK"
+	$(ANSIBLE) ansible-playbook pihole-upgrade.yml --syntax-check >/dev/null && echo "pihole-upgrade.yml OK"
 	@python3 -m py_compile scripts/dns-ask.py scripts/pihole-sync.py && echo "dns-ask.py, pihole-sync.py OK"
 	@bash -n entrypoint.sh && bash -n bind-reload.sh && echo "shell syntax OK"
 	@docker build -q -t $(IMAGE) . >/dev/null && echo "image builds"
@@ -100,7 +101,7 @@ logs: ## Last 100 log lines on every server
 # group_vars/pihole.yml. LIMIT=pihole2 works here too.
 
 .PHONY: test-pihole
-test-pihole: ## pihole.yml vs throwaway Pi-hole containers (FTL 6.2.3 and 6.8): plan, apply, changed=0, lists, refusals
+test-pihole: ## pihole.yml and pihole-upgrade.yml vs throwaway Pi-hole containers (FTL 6.2.3 and 6.8)
 	./scripts/test-pihole.sh
 
 .PHONY: pihole-check
@@ -114,3 +115,11 @@ pihole-deploy: ## Apply group_vars/pihole.yml, one Pi-hole at a time, each verif
 .PHONY: pihole-verify
 pihole-verify: ## On each Pi-hole: a normal name resolves, a blocklist domain and every deny entry are blocked
 	$(ANSIBLE) ansible-playbook pihole.yml $(LIMIT_ARGS) --tags verify
+
+.PHONY: pihole-upgrade-check
+pihole-upgrade-check: ## Which Pi-holes are behind the latest release, and whether the others answer (read-only)
+	$(ANSIBLE) ansible-playbook pihole-upgrade.yml $(LIMIT_ARGS) --check
+
+.PHONY: pihole-upgrade
+pihole-upgrade: ## `pihole -up` on each Pi-hole that's behind, one at a time, only while another answers; then re-apply and verify
+	$(ANSIBLE) ansible-playbook pihole-upgrade.yml $(LIMIT_ARGS)

@@ -28,7 +28,7 @@ make test-playbook  # real playbook vs a DinD copy of networkdocker's pre-Ansibl
 make release [MSG=..] [YES=1]   # validate, commit, push, watch CI, check, deploy (scripts/release.sh)
 make check / deploy [FORCE=1] [LIMIT=bind-a] / verify / ps / logs
 make image-tag / ecr-images / ecr-policy
-make test-pihole / pihole-check / pihole-deploy [LIMIT=pihole2] / pihole-verify
+make test-pihole / pihole-check / pihole-deploy [LIMIT=pihole2] / pihole-verify / pihole-upgrade-check / pihole-upgrade
 ```
 
 ## Architecture
@@ -151,6 +151,17 @@ desired state as base64 JSON on its command line.
   `2026.10.0` (6.8), Alpine, with `apk add python3`. Never open
   `gravity.db` before the image's first gravity run: sqlite creates it empty,
   and start.sh then skips building it.
+- **`pihole-upgrade.yml`** (`pihole_upgrade` role, then `pihole`) reads
+  `/etc/pihole/versions` (installed and `GITHUB_*` latest, from Pi-hole's
+  daily updatechecker). Never `pihole -up --check-only`: it reinstalls the
+  dependency package before checking. Before `pihole -up`, it asks the other
+  Pi-holes from this host over the LAN (`pihole-sync.py ask`, at
+  `pihole_address`, which lives in group_vars so every host can read every
+  other's) and refuses if none answer. Not `delegate_to`: an unreachable
+  delegated item ends the play even with `ignore_unreachable`. The test
+  can't run a real `pihole -up` (the image doesn't upgrade itself), so it
+  stands in a wrapper that sets installed = latest. The real upgrade path is
+  only exercised on the VMs.
 - **`make release` runs `git add -A`**, so Pi-hole changes ride along with
   whatever records change is being released.
 

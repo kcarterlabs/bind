@@ -1,0 +1,13 @@
+---
+# Upgrade the Pi-holes to the latest Pi-hole release, one at a time, each
+# only while another Pi-hole answers (BIND forwards to all three). A host
+# that's already current is skipped. Afterwards the pihole role re-applies
+# group_vars/pihole.yml and verifies, as `make pihole-deploy` would.
+- name: Upgrade the Pi-holes
+  hosts: pihole
+  gather_facts: false
+  serial: 1
+  any_errors_fatal: true
+  roles:
+    - pihole_upgrade
+    - pihole

@@ -11,6 +11,9 @@
 #   - a second run and --check are changed=0
 #   - a domains-only change reloads lists without a gravity rebuild
 #   - a setting this FTL doesn't know fails before anything changes
+#   - pihole-upgrade.yml (pihole -up stood in for): --check shows what's
+#     behind, it refuses while no other Pi-hole answers, upgrades only the
+#     host that's behind, checks the versions after, re-verifies, then no-ops
 # Needs Docker and the internet (gravity downloads the blocklist; upstreams
 # are 8.8.8.8).
 set -euo pipefail
@@ -51,7 +54,14 @@ done
 
 rm -rf "$INV" && mkdir -p "$INV"
 ln -s ../../ansible/inventory/group_vars "$INV/group_vars"
-{ echo "[pihole]"; for h in "${!IMAGES[@]}"; do echo "$h ansible_host=test-$h ansible_connection=community.docker.docker ansible_user=root"; done; } > "$INV/hosts.ini"
+# pihole_address: where the other Pi-hole asks it (pihole-upgrade.yml). A
+# restarted container can get a new one, so this is rerun after a restart.
+inventory() {
+  { echo "[pihole]"; for h in "${!IMAGES[@]}"; do
+      echo "$h ansible_host=test-$h ansible_connection=community.docker.docker ansible_user=root pihole_address=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "test-$h")"
+    done; } > "$INV/hosts.ini"
+}
+inventory
 
 DOMAINS='{"pihole_domains": {"allow": ["allowed.example.com"], "deny": ["denied-by-test.example.com"], "allow_regex": [], "deny_regex": ["^ads-regex-test\\."]}}'
 play() {
@@ -105,6 +115,43 @@ before=$(cfg ph62 dns.queryLogging)
 out=$(play -e '{"pihole_settings": {"dns.queryLogging": false, "dns.noSuchSetting": 1}}' 2>&1) && fail "accepted an unknown key"
 grep -q 'dns.noSuchSetting is not a setting' <<<"$out" && [ "$(cfg ph62 dns.queryLogging)" = "$before" ] \
   && pass "stopped in preflight, nothing changed" || { echo "$out" | tail -15; fail "wrong failure"; }
+
+echo "== pihole-upgrade.yml, with \`pihole -up\` stood in for (the image can't upgrade itself)"
+# ph62 is "behind": its versions file says so, and the stand-in for
+# `pihole -up` does what a successful upgrade leaves behind, installed =
+# latest. ph68 is current. The real `pihole -up` is only run on the VMs.
+for h in ph62 ph68; do
+  x "$h" 'mv /usr/local/bin/pihole /usr/local/bin/pihole.real
+    printf "%s\n" "#!/bin/sh" "if [ \"\$1\" = -up ]; then" \
+      "  for c in CORE WEB FTL; do v=\$(sed -n \"s/^GITHUB_\${c}_VERSION=//p\" /etc/pihole/versions); sed -i \"s/^\${c}_VERSION=.*/\${c}_VERSION=\$v/\" /etc/pihole/versions; done" \
+      "  echo upgraded >> /tmp/upgrades; exit 0" "fi" "exec /usr/local/bin/pihole.real \"\$@\"" > /usr/local/bin/pihole
+    chmod +x /usr/local/bin/pihole'
+  x "$h" 'printf "%s\n" CORE_VERSION=v6.1.4 GITHUB_CORE_VERSION=v6.5 WEB_VERSION=v6.2.1 GITHUB_WEB_VERSION=v6.6.1 FTL_VERSION=v6.2.3 GITHUB_FTL_VERSION=v6.8 > /etc/pihole/versions'
+done
+x ph68 'sed -i "s/^CORE_VERSION=.*/CORE_VERSION=v6.5/; s/^WEB_VERSION=.*/WEB_VERSION=v6.6.1/; s/^FTL_VERSION=.*/FTL_VERSION=v6.8/" /etc/pihole/versions'
+upgrade() {
+  (cd "$REPO_ROOT/ansible" && ANSIBLE_CALLBACKS_ENABLED= ANSIBLE_DISPLAY_SKIPPED_HOSTS=false \
+     ansible-playbook pihole-upgrade.yml -i "$INV/hosts.ini" -e "$DOMAINS" "$@")
+}
+upgrades() { x "$1" 'cat /tmp/upgrades 2>/dev/null | wc -l'; }
+
+out=$(upgrade --check 2>&1) || { echo "$out" | tail -30; fail "upgrade --check failed"; }
+grep -q 'Core v6.1.4 -> v6.5; Web v6.2.1 -> v6.6.1; FTL v6.2.3 -> v6.8' <<<"$out" && grep -q 'current (v6.5, FTL v6.8)' <<<"$out" \
+  && [ "$(upgrades ph62)" = 0 ] && pass "--check: ph62 behind, ph68 current, nothing run" || { echo "$out" | grep -A2 'Say what would be upgraded'; fail "upgrade --check"; }
+
+docker stop test-ph68 >/dev/null
+out=$(upgrade --limit ph62 2>&1) && fail "upgraded with no other Pi-hole answering"
+grep -q 'No other Pi-hole answers (172' <<<"$out" && [ "$(upgrades ph62)" = 0 ] \
+  && pass "refused while ph68 is down; nothing run" || { echo "$out" | tail -15; fail "wrong failure"; }
+docker start test-ph68 >/dev/null
+inventory
+for _ in $(seq 60); do x ph68 'test -s /etc/pihole/gravity.db' 2>/dev/null && [ "$(cfg ph68 dns.queryLogging 2>/dev/null)" = true ] && break; sleep 2; done
+
+out=$(upgrade 2>&1) || { echo "$out" | tail -30; fail "upgrade failed"; }
+[ "$(upgrades ph62)" = 1 ] && [ "$(upgrades ph68)" = 0 ] && pass "ph62 upgraded, ph68 skipped ($(recap "$out"))" || fail "upgrades: ph62 $(upgrades ph62) ph68 $(upgrades ph68)"
+grep -q 'ph62: Core v6.5, Web v6.6.1, FTL v6.8' <<<"$out" && grep -q 'denied-by-test.example.com -> 0.0.0.0' <<<"$out" \
+  && pass "versions checked after, then the pihole role verified both" || { echo "$out" | grep -A4 -E 'latest release|Show the checks'; fail "after upgrade"; }
+out=$(upgrade 2>&1); all_unchanged "$out" && [ "$(upgrades ph62)" = 1 ] && pass "again: $(recap "$out"), nothing run" || fail "second upgrade run: $(recap "$out")"
 
 echo
 echo "All Pi-hole checks passed."

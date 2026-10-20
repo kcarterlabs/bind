@@ -149,10 +149,12 @@ and a blocklist domain and every deny entry answer `0.0.0.0`.
 | `make pihole-check` | What would change on each Pi-hole. Read-only |
 | `make pihole-deploy` | Apply, one at a time. `LIMIT=pihole2` for one |
 | `make pihole-verify` | Resolve and block checks only |
+| `make pihole-upgrade-check` | Which Pi-holes are behind the latest release (from `/etc/pihole/versions`), and whether the others answer. Read-only |
+| `make pihole-upgrade` | `pihole -up` on each Pi-hole that's behind, one at a time, only while another Pi-hole answers. Then the new versions are checked, and `pihole.yml` re-applied and verified |
 
-Installing Pi-hole and upgrading it (`pihole -up`) are still done by hand,
-one host at a time. On 2026-10-20, pihole2 and pihole3 ran Pi-hole 6.1.4 /
-FTL 6.2.3, and pihole4 ran 6.5 / FTL 6.8.
+"Latest" is what Pi-hole's own daily `pihole updatechecker` last saw, so a
+release can take up to a day to show. Installing Pi-hole on a new VM is still
+by hand.
 
 ## Kubernetes
 

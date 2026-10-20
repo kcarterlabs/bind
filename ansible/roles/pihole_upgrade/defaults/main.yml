@@ -1,0 +1,5 @@
+---
+# How long `pihole -up` may take: apt dependencies, three git pulls, an FTL
+# download, and a gravity rebuild.
+pihole_upgrade_timeout: 1200
+

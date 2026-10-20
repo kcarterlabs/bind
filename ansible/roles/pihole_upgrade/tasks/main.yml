@@ -1,0 +1,90 @@
+---
+# What's installed and what's latest, from /etc/pihole/versions: Pi-hole's
+# own `pihole updatechecker` (daily cron, and at boot) writes both. Read
+# only. `pihole -up --check-only` is not used: it reinstalls Pi-hole's
+# dependency package before it checks.
+- name: Read installed and latest versions
+  ansible.builtin.slurp:
+    src: /etc/pihole/versions
+  register: pihole_versions_file
+  become: true
+  tags: [always]
+
+- name: Work out what's behind
+  ansible.builtin.set_fact:
+    pihole_versions_before: "{{ v }}"
+    pihole_behind: >-
+      {%- set out = [] -%}
+      {%- for c, label in [('CORE', 'Core'), ('WEB', 'Web'), ('FTL', 'FTL')] -%}
+        {%- set have = v.get(c ~ '_VERSION', '') -%}
+        {%- set latest = v.get('GITHUB_' ~ c ~ '_VERSION', '') -%}
+        {%- if latest and have != latest -%}{{ out.append(label ~ ' ' ~ have ~ ' -> ' ~ latest) }}{%- endif -%}
+      {%- endfor -%}
+      {{ out }}
+  vars:
+    v: "{{ dict((pihole_versions_file.content | b64decode).splitlines() | select('search', '=') | map('split', '=', 1)) }}"
+  tags: [always]
+
+- name: Say what would be upgraded
+  ansible.builtin.debug:
+    msg: "{{ pihole_behind | join('; ') if pihole_behind else 'current (' ~ pihole_versions_before.CORE_VERSION ~ ', FTL ' ~ pihole_versions_before.FTL_VERSION ~ ')' }}"
+  changed_when: ansible_check_mode and pihole_behind | length > 0
+  tags: [always]
+
+# FTL restarts during the upgrade, so this Pi-hole stops answering for a
+# while. Only go ahead while at least one other one resolves: that is what
+# BIND falls back to. Asked from here over the LAN, the way BIND reaches
+# them (listeningMode LOCAL answers the Pi-holes' own subnet).
+- name: Ask the other Pi-holes from here
+  ansible.builtin.script:
+    cmd: >-
+      {{ playbook_dir }}/../scripts/pihole-sync.py ask {{ pihole_verify_name }}
+      {{ groups['pihole'] | difference([inventory_hostname]) | map('extract', hostvars, 'pihole_address') | join(' ') }}
+    executable: python3
+  register: pihole_others
+  changed_when: false
+  check_mode: false
+  become: true
+  when: pihole_behind | length > 0
+
+- name: Check another Pi-hole is answering
+  ansible.builtin.assert:
+    that: (pihole_others.stdout | from_json).answering > 0
+    fail_msg: >-
+      No other Pi-hole answers ({{ (pihole_others.stdout | from_json).servers | dict2items
+      | map(attribute='key') | zip((pihole_others.stdout | from_json).servers.values()) | map('join', ': ') | join(', ') }}),
+      so upgrading {{ inventory_hostname }} would leave BIND nothing to forward to. Fix them first.
+    success_msg: "Others answering: {{ (pihole_others.stdout | from_json).servers }}"
+  when: pihole_behind | length > 0
+
+- name: Upgrade (pihole -up)
+  ansible.builtin.command:
+    argv: [pihole, -up]
+  async: "{{ pihole_upgrade_timeout }}"
+  poll: 15
+  register: pihole_up
+  become: true
+  when: pihole_behind | length > 0 and not ansible_check_mode
+
+- name: Read the versions again
+  ansible.builtin.slurp:
+    src: /etc/pihole/versions
+  register: pihole_versions_after_file
+  become: true
+  when: pihole_up is changed
+
+- name: Check it's on the latest release now
+  vars:
+    v: "{{ dict((pihole_versions_after_file.content | b64decode).splitlines() | select('search', '=') | map('split', '=', 1)) }}"
+  ansible.builtin.assert:
+    that:
+      - v.CORE_VERSION == pihole_versions_before.GITHUB_CORE_VERSION
+      - v.WEB_VERSION == pihole_versions_before.GITHUB_WEB_VERSION
+      - v.FTL_VERSION == pihole_versions_before.GITHUB_FTL_VERSION
+    fail_msg: >-
+      {{ inventory_hostname }} is on Core {{ v.CORE_VERSION }}, Web {{ v.WEB_VERSION }}, FTL {{ v.FTL_VERSION }}
+      after `pihole -up`; expected {{ pihole_versions_before.GITHUB_CORE_VERSION }},
+      {{ pihole_versions_before.GITHUB_WEB_VERSION }}, {{ pihole_versions_before.GITHUB_FTL_VERSION }}.
+      Its output: {{ pihole_up.stdout_lines[-15:] | join(' | ') }}
+    success_msg: "{{ inventory_hostname }}: Core {{ v.CORE_VERSION }}, Web {{ v.WEB_VERSION }}, FTL {{ v.FTL_VERSION }}"
+  when: pihole_up is changed

@@ -6,6 +6,8 @@
     pihole-sync.py verify STATE_B64   ask 127.0.0.1: a normal name resolves, a
                                       gravity domain and every exact deny
                                       entry come back blocked (0.0.0.0)
+    pihole-sync.py ask NAME SERVER... ask other servers for NAME: {SERVER:
+                                      addresses or error}, "answering": count
 
 STATE_B64 is base64 JSON (no quoting trouble on a command line):
 
@@ -200,7 +202,21 @@ def verify(state):
     return {"ok": ok, "checks": results}
 
 
+def ask_servers(name, servers):
+    out = {"servers": {}}
+    for server in servers:
+        try:
+            out["servers"][server] = ",".join(ask(name, server)) or "no A records"
+        except (RuntimeError, OSError) as e:
+            out["servers"][server] = f"FAIL ({e})"
+    out["answering"] = sum(1 for v in out["servers"].values() if v[:1].isdigit() and v != "0.0.0.0")
+    return out
+
+
 def main(argv):
+    if argv[:1] == ["ask"] and len(argv) >= 2:
+        print(json.dumps(ask_servers(argv[1], argv[2:])))
+        return 0
     if len(argv) != 2 or argv[0] not in ("plan", "apply", "verify"):
         raise SystemExit(__doc__)
     state = json.loads(base64.b64decode(argv[1]))
