@@ -55,10 +55,6 @@ records:
     type: A
     value: 10.10.69.9
     ttl: 300
-  - name: proxmoxdev
-    type: A
-    value: 10.10.69.13
-    ttl: 300
   - name: pihole2
     type: A
     value: 10.10.69.22
@@ -113,6 +109,10 @@ records:
     value: 10.10.69.30
     ttl: 300
   - name: tdarr           # ~/Code/arr_stack, :8265
+    type: A
+    value: 10.10.69.30
+    ttl: 300
+  - name: plex            # TrueNAS app ix-plex, :32400
     type: A
     value: 10.10.69.30
     ttl: 300

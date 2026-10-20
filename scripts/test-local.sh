@@ -87,12 +87,13 @@ healthy && pass "still healthy" || fail "unhealthy after a bad edit"
 
 echo "== named dying takes the container down, and the restart policy brings it back"
 replace records.yaml "$REPO_ROOT/records.yaml"
-wait_for 15 sh -c "[ \"\$(dig +short -p $PORT @127.0.0.1 truenas.$ZONE)\" = 10.20.69.2 ]" || fail "good file not reloaded"
+truenas=$(python3 -c 'import sys, yaml; print(next(r["value"] for r in yaml.safe_load(open(sys.argv[1]))["records"] if r["name"] == "truenas"))' "$REPO_ROOT/records.yaml")
+wait_for 15 sh -c "[ \"\$(dig +short -p $PORT @127.0.0.1 truenas.$ZONE)\" = $truenas ]" || fail "good file not reloaded"
 restarts=$(docker inspect -f '{{.RestartCount}}' "$NAME")
 docker exec "$NAME" pkill -x named || true
 wait_for 30 sh -c "[ \$(docker inspect -f '{{.RestartCount}}' $NAME) -gt $restarts ]" \
   && pass "container restarted after named died" || fail "container kept running without named"
-wait_for 60 healthy && [ "$(q truenas.$ZONE)" = 10.20.69.2 ] && pass "answering again" || fail "did not recover"
+wait_for 60 healthy && [ "$(q truenas.$ZONE)" = "$truenas" ] && pass "answering again" || fail "did not recover"
 
 echo
 echo "All checks passed.$([ "${KEEP:-}" = 1 ] && echo " Left running: dig -p $PORT @127.0.0.1 truenas.$ZONE")"
