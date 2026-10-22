@@ -31,10 +31,6 @@ records:
     type: A
     value: 192.168.10.15
     ttl: 300
-  - name: argocd
-    type: A
-    value: 10.20.69.20
-    ttl: 300
   - name: rancher 
     type: A
     value: 10.10.69.3
@@ -167,4 +163,34 @@ records:
   - name: pihole4         # VM 204 on pve2
     type: A
     value: 10.10.69.28
+    ttl: 300
+
+  # ---- K3s cluster (~/Code/k3s) ----
+  - name: k3s             # the Kubernetes API, Keepalived VIP on the servers
+    type: A
+    value: 10.10.69.40
+    ttl: 300
+  - name: k3s-1           # server, pve5
+    type: A
+    value: 10.10.69.41
+    ttl: 300
+  - name: k3s-2           # server, pve4
+    type: A
+    value: 10.10.69.42
+    ttl: 300
+  - name: k3s-3           # server, pve2
+    type: A
+    value: 10.10.69.43
+    ttl: 300
+  - name: k3s-agent-1     # agent, PVE10g
+    type: A
+    value: 10.10.69.44
+    ttl: 300
+  - name: argocd          # Argo CD UI, via Traefik
+    type: A
+    value: 10.10.69.30
+    ttl: 300
+  - name: postgres        # CloudNativePG writer, MetalLB address
+    type: A
+    value: 10.10.69.100
     ttl: 300
