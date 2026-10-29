@@ -153,7 +153,7 @@ Each step can be undone by itself. networkdocker keeps answering until step 10.
    - `ns1` → 10.10.69.26, add `ns2` → 10.10.69.27, and set
      `nameservers: [ns1…, ns2…]`.
    - Add `pihole4`, `bind-a` and `bind-b` names if wanted.
-   - Replace or delete the Helm chart's stale copy (`bind-flask/values.yaml`).
+   - Delete the Helm chart's stale copy (`bind-flask/`). Done 2026-10-23.
    - `make release`.
 10. **Retire networkdocker's BIND:**
     - Remove it from `[dns]` (and `host_vars/networkdocker.yml`).

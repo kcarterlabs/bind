@@ -33,13 +33,14 @@ make test-pihole / pihole-check / pihole-deploy [LIMIT=pihole2] / pihole-verify 
 
 ## Architecture
 
-**One records.yaml, three consumers:**
+**One records.yaml, two consumers:**
 
 - the Ansible deploy mounts it
 - the CI image bakes it in (the Dockerfile copies it)
-- the Helm chart has its own stale copy in `bind-flask/values.yaml`
 
-`zone_converter.py` turns it into a zone file in all three. `serial: auto`
+`zone_converter.py` turns it into a zone file in both. (A Helm chart,
+`bind-flask/`, had a stale copy; deleted 2026-10-23. DNS stays off the K3s
+cluster, so it never depends on it.) `serial: auto`
 is Unix time at generation.
 
 **The image's config-directory mode.** With `BIND_CONFIG_DIR` set (the

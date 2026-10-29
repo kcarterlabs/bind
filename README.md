@@ -155,9 +155,3 @@ and a blocklist domain and every deny entry answer `0.0.0.0`.
 "Latest" is what Pi-hole's own daily `pihole updatechecker` last saw, so a
 release can take up to a day to show. Installing Pi-hole on a new VM is still
 by hand.
-
-## Kubernetes
-
-`bind-flask/` is a Helm chart for the same image. Its `values.yaml` carries
-its own copy of the records (older, without `dinner-menu` and the `~/Code`
-apps): copy records.yaml in when you next use it.
