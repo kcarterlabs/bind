@@ -20,7 +20,7 @@
 #     copies the image from here (pulled once, saved once), hands over from
 #     bind-flask; one server at a time
 #   - idempotency, --check
-#   - a records-only change (and a second NS): reload, same containers, no copy
+#   - a records-only change: reload, same containers, no copy
 #   - a broken records.yaml stops at the lint, before any server
 #   - a code change CI hasn't pushed: the pull here fails, before the first
 #     server is touched; once pushed: new image on both, old images gone
@@ -217,9 +217,9 @@ docker exec "$ND" docker image inspect "$REG/$REPO:latest" >/dev/null 2>&1 && fa
 for h in "$VM" "$ND"; do docker exec "$h" test -f /etc/cron.d/bind-healthcheck || fail "no healthcheck cron on $h"; done
 pass "healthcheck cron on both"
 for ip in "$IP_A" "$IP_ND"; do
-  [ "$(dig +short "@$ip" immich.kcarterlabs.tech)" = 10.20.69.2 ] || fail "immich missing on $ip"
+  [ "$(dig +short "@$ip" immich.kcarterlabs.tech)" = 10.10.69.30 ] || fail "immich missing on $ip"
 done
-pass "both answer the new names (immich -> 10.20.69.2)"
+pass "both answer the new names (immich -> 10.10.69.30)"
 
 echo "== second deploy and --check: changed=0"
 out=$(play 2>&1) || { echo "$out" | tail -30; fail "second deploy failed"; }
@@ -229,20 +229,18 @@ out=$(play --check --skip-tags verify 2>&1) || { echo "$out" | tail -30; fail "c
 changed0 "$out" || { echo "$out" | grep -B3 -A6 '^changed' | head -40; fail "$(recap "$out")"; }
 pass "--check: $(recap "$out")"
 
-echo "== a records change (and a second NS) is a reload: same containers, no copy, new answers"
+echo "== a records change is a reload: same containers, no copy, new answers"
 before_a=$(cid "$VM"); before_nd=$(cid "$ND")
 sed -i 's/^\(    value: \)10\.10\.69\.25$/\110.10.69.26/' "$WORK/repo/records.yaml"
-sed -i 's/^  nameservers: \[ns1.kcarterlabs.tech.\]$/  nameservers: [ns1.kcarterlabs.tech., ns2.kcarterlabs.tech.]/' "$WORK/repo/records.yaml"
-printf '  - name: ns2\n    type: A\n    value: 10.10.69.27\n' >> "$WORK/repo/records.yaml"
 out=$(play 2>&1) || { echo "$out" | tail -30; fail "records deploy failed"; }
 [ "$(grep -c 'RUNNING HANDLER \[bind : Reload bind\]' <<<"$out")" = 2 ] && pass "reloaded on both: $(recap "$out")" || fail "no reload"
 grep -qE 'TASK \[bind : (Pull it|Copy it to the server)\]' <<<"$out" && fail "image moved for a records-only change" || pass "no pull, no copy (same code tag)"
 [ "$(cid "$VM")" = "$before_a" ] && [ "$(cid "$ND")" = "$before_nd" ] && pass "same containers (no restart)" || fail "a container was recreated"
 for ip in "$IP_A" "$IP_ND"; do
-  [ "$(dig +short "@$ip" qbittorrent.kcarterlabs.tech)" = 10.10.69.26 ] || fail "change not served on $ip"
+  [ "$(dig +short "@$ip" gol-d-roger.kcarterlabs.tech)" = 10.10.69.26 ] || fail "change not served on $ip"
   [ "$(dig +short "@$ip" kcarterlabs.tech NS | sort | paste -sd' ')" = "ns1.kcarterlabs.tech. ns2.kcarterlabs.tech." ] || fail "NS on $ip: $(dig +short "@$ip" kcarterlabs.tech NS)"
 done
-pass "both serve the change and two NS records (verify checked each)"
+pass "both serve the change and the two NS records (verify checked each)"
 
 echo "== a broken records.yaml stops the run before any server is touched"
 cp "$WORK/repo/records.yaml" "$WORK/records.good"
@@ -260,7 +258,7 @@ out=$(play 2>&1) && fail "deployed an image that isn't in the registry"
 grep -B1 fatal <<<"$out" | grep -q 'Pull it' && pass "stopped at the pull, on bind-a" || { echo "$out" | grep -A5 fatal | head; fail "failed somewhere else"; }
 grep -q '\[networkdocker' <<<"$out" && fail "networkdocker was touched after bind-a failed" || pass "networkdocker never started (serial, any_errors_fatal)"
 [ "$(cid "$VM")" = "$before_a" ] && [ "$(cid "$ND")" = "$before_nd" ] \
-  && [ "$(dig +short "@$IP_A" truenas.kcarterlabs.tech)" = 10.20.69.2 ] && [ "$(dig +short "@$IP_ND" truenas.kcarterlabs.tech)" = 10.20.69.2 ] \
+  && [ "$(dig +short "@$IP_A" truenas.kcarterlabs.tech)" = 10.10.69.30 ] && [ "$(dig +short "@$IP_ND" truenas.kcarterlabs.tech)" = 10.10.69.30 ] \
   && pass "both servers untouched and answering" || fail "a server was disturbed by a failed deploy"
 
 echo "== once CI pushes it: new image on both, containers recreated, old images gone"
