@@ -1,3 +1,6 @@
+# RETIRED 2026-10-29: no longer in hosts.ini. Kept only as the fixture
+# `make test-playbook` uses to prove the legacy cutover.
+#
 # networkdocker (10.10.69.21): the original server, set up by hand before this
 # repo existed. Checked on 2026-10-18: Ubuntu 24.04.3, Docker 29.1.3 with
 # compose v5.0.0, systemd-resolved with DNSStubListener=no (so port 53 is

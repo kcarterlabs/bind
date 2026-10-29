@@ -3,8 +3,8 @@
 The LAN's DNS server: authoritative for `kcarterlabs.tech`, recursing to the
 Pi-holes (10.10.69.22, .23, .28) for everything else. It runs as an
 identical container on every host in `[dns]`: **bind-a 10.10.69.26** (pve5),
-**bind-b 10.10.69.27** (pve4), and **networkdocker 10.10.69.21** until it
-retires. `PLAN.md` has the migration and its cutover steps. `make deploy`
+**bind-b 10.10.69.27** (pve4). networkdocker (10.10.69.21), the original,
+left the list on 2026-10-29. `PLAN.md` has the migration and its cutover steps. `make deploy`
 does one server at a time and verifies each before the next.
 
 ```

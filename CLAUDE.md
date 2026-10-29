@@ -3,8 +3,9 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 BIND for `kcarterlabs.tech` on every host in `[dns]`: bind-a (10.10.69.26,
-pve5), bind-b (.27, pve4) and, until it's retired, networkdocker (.21, on the
-seasonal 5700G). Each is an identical server from the same records.yaml, no
+pve5) and bind-b (.27, pve4). networkdocker (.21, on the seasonal 5700G) left
+`[dns]` on 2026-10-29; its host_vars remain only as `make test-playbook`'s
+legacy-cutover fixture. Each is an identical server from the same records.yaml, no
 zone transfers: authoritative for the zone, forwarding everything else to
 the Pi-holes. GitHub Actions builds the image and pushes it to ECR, and
 Ansible deploys it. `PLAN.md` is the migration onto the minis and its
