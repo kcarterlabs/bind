@@ -86,6 +86,10 @@ records:
     type: A
     value: 10.10.69.30
     ttl: 300
+  - name: auth            # ~/Code/selfhost (Authentik), :9085
+    type: A
+    value: 10.10.69.30
+    ttl: 300
   - name: prowlarr        # ~/Code/arr_stack, :9696
     type: A
     value: 10.10.69.30
