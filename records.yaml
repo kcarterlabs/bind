@@ -200,3 +200,7 @@ records:
     type: A
     value: 10.10.69.100
     ttl: 300
+  - name: pgbackup        # Postgres backup VM (VM 9300, PVE10g): standby, WAL archive, dumps. ~/Code/pgbackup
+    type: A
+    value: 10.10.69.46
+    ttl: 300
