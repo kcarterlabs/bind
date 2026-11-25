@@ -90,6 +90,14 @@ records:
     type: A
     value: 10.10.69.30
     ttl: 300
+  - name: git             # ~/Code/selfhost (Forgejo), :3030; SSH is 10.20.69.2:2222
+    type: A
+    value: 10.10.69.30
+    ttl: 300
+  - name: git-ssh         # Forgejo's SSH (~/Code/selfhost): the NAS itself, port 2222. Not the Traefik VIP.
+    type: A
+    value: 10.20.69.2
+    ttl: 300
   - name: prowlarr        # ~/Code/arr_stack, :9696
     type: A
     value: 10.10.69.30
